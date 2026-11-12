@@ -52,3 +52,19 @@ test('real RealtimeKit lifecycle events update voice status and clean up',()=>{
   assert.match(html, /voiceNet\("Microphone error/);
   assert.match(html, /Tap Join Voice to listen/);
 });
+
+test('WebView uses bundled first-party HTTPS asset loader for WebRTC',()=>{
+  const gradle=readFileSync(new URL('../android/app/build.gradle',import.meta.url),'utf8');
+  assert.match(gradle, /androidx\.webkit:webkit:1\.18\.0/);
+  assert.match(android, /WebViewAssetLoader\.Builder\(\)/);
+  assert.match(android, /addPathHandler\("\/assets\/", new WebViewAssetLoader\.AssetsPathHandler\(this\)\)/);
+  assert.match(android, /https:\/\/appassets\.androidplatform\.net\/assets\/sura-chat\.html/);
+  assert.match(android, /shouldInterceptRequest\(request\.getUrl\(\)\)/);
+  assert.match(android, /webView\.loadUrl\(APP_URL\)/);
+  assert.doesNotMatch(android, /loadDataWithBaseURL/);
+  assert.match(android, /setAllowFileAccessFromFileURLs\(false\)/);
+  assert.match(android, /setAllowUniversalAccessFromFileURLs\(false\)/);
+  assert.match(android, /isForMainFrame/);
+  assert.match(android, /!APP_URL\.equals/);
+  assert.match(android, /onRenderProcessGone/);
+});
