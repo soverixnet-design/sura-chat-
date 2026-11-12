@@ -2,12 +2,12 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import worker from '../src/worker.js';
 const loggedIn = 'A'.repeat(43);
-function envAndLog() {
+function envAndLog(sampleRooms=[]) {
  const calls=[];
  const DB={prepare(sql){return {
    bind(...params){this.params=params;return this;},
    async first(){if(sql.includes('FROM auth_sessions AS s'))return {id:'me',public_id:'1234567',display_name:'My name',country_code:'BD',bio:'',avatar_key:null};return null;},
-   async all(){calls.push({sql,params:this.params,read:true});return {results:[]};},
+   async all(){calls.push({sql,params:this.params,read:true});return {results:sampleRooms};},
    async run(){calls.push({sql,params:this.params,write:true});return {meta:{changes:1}};}
  };}};
  return {env:{DB,AUTH_RL:{limit:async()=>({success:true})},ROOM_RL:{limit:async()=>({success:true})}},calls};
@@ -26,7 +26,7 @@ test('room search uses bound server-side SQL, not client-only list filtering',as
  assert.deepEqual(res.data.rooms,[]);
  const query=calls.find(c=>c.read);
  assert.match(query.sql,/instr\(lower\(r\.name\), lower\(\?\)\) > 0/);
- assert.deepEqual(query.params.slice(-6),['BD','BD','Golden','Golden','',20]);
+ assert.deepEqual(query.params.slice(-6),['BD','BD','Golden','Golden','',21,0]);
 });
 test('room search rejects excessive input',async()=>{
  const {env}=envAndLog();
@@ -50,4 +50,35 @@ test('country update rejects invalid codes and anonymous changes',async()=>{
  assert.equal(invalid.data.error,'invalid_profile');
  const anonymous=await request(env,'/api/v1/me/profile',{method:'POST',body:{display_name:'My name',bio:'',country_code:'BD'}});
  assert.equal(anonymous.status,401);
+});
+
+test('room search paginates using only bound, validated offsets and a stable tie-break',async()=>{
+ const rows=[
+  {id:'a',name:'Room A',country_code:'BD'},
+  {id:'b',name:'Room B',country_code:'BD'},
+  {id:'c',name:'Room C',country_code:'BD'}
+ ];
+ const {env,calls}=envAndLog(rows);
+ const page=await request(env,'/api/v1/rooms?limit=2&offset=40&q=Room');
+ assert.equal(page.status,200);
+ assert.deepEqual(page.data.rooms.map(r=>r.id),['a','b']);
+ assert.equal(page.data.count,2);
+ assert.equal(page.data.has_more,true);
+ assert.equal(page.data.next_offset,42);
+ const q=calls.find(c=>c.read);
+ assert.match(q.sql,/ORDER BY[\s\S]+r\.created_at DESC, r\.id DESC LIMIT \? OFFSET \?/);
+ assert.deepEqual(q.params.slice(-2),[3,40]);
+});
+
+test('room offsets reject malformed and excessive pagination requests',async()=>{
+ const {env}=envAndLog();
+ for(const offset of ['-1','1.5','001','5001','10000000','wrong']){
+  const r=await request(env,'/api/v1/rooms?offset='+encodeURIComponent(offset));
+  assert.equal(r.status,400,offset);
+  assert.equal(r.data.error,'invalid_room_offset',offset);
+ }
+ const empty=await request(env,'/api/v1/rooms?offset=20');
+ assert.equal(empty.status,200);
+ assert.equal(empty.data.has_more,false);
+ assert.equal(empty.data.next_offset,null);
 });
