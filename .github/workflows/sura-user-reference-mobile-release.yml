@@ -1,0 +1,43 @@
+name: Publish SURA Owner Royal Mobile v0.5.13 TEST APK
+on:
+  push:
+    branches: [feature/sura-user-reference-mobile-ui-20261112]
+    paths: ['.github/workflows/sura-user-reference-mobile-release.yml']
+permissions:
+  contents: write
+  actions: read
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Require successful source and Android build
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          test "$(gh run view 43293242089 --repo "$GITHUB_REPOSITORY" --json conclusion --jq '.conclusion')" = success
+          test "$(gh run view 43293242102 --repo "$GITHUB_REPOSITORY" --json conclusion --jq '.conclusion')" = success
+      - name: Retrieve Android artifact and check its verified hash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p out
+          gh run download 43293242102 --repo "$GITHUB_REPOSITORY" --name sura-chat-debug-unverified --dir out
+          mv out/app-debug.apk out/SURA_CHAT_Royal_3D_v0.5.13_User_Reference_Staging.apk
+          printf '%s  %s\n' 'b5555138d2b161808c1ac32728b3952664d4392aa632b86b1fe1f6df6dd36de0' 'out/SURA_CHAT_Royal_3D_v0.5.13_User_Reference_Staging.apk' | sha256sum -c -
+      - name: Publish public test pre-release for phone download
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create sura-chat-v0.5.13-user-reference-staging \
+            'out/SURA_CHAT_Royal_3D_v0.5.13_User_Reference_Staging.apk#SURA CHAT user-provided Royal 3D mobile reference TEST APK' \
+            --repo "$GITHUB_REPOSITORY" \
+            --target '61f7ecdbf0d18b81e02ed3ee5e38ebf9de3b4cee' \
+            --title 'SURA CHAT v0.5.13 — Original Royal mobile design (TEST APK)' \
+            --notes 'Staging TEST APK based on the owner\x27s original supplied sura-chat.html design, NOT the rejected assistant-made home. Uses owner\x27s crown/3D icons, purple/gold home and room, five shortcuts, 3x2 room toolbar. Preserves real SURA login, user avatars, room messages, moderation and RealtimeKit voice; fake coin/game/host data is not imported. Unsupported Ranking/Events/Daily and gift sending are transparently unimplemented. Static source QA and Android build passed. Android viewport previews checked at 320,360,393,412px (not real physical-device acceptance); two-phone audible voice and all Play Store release requirements remain unverified. No production backend or user data changes.' \
+            --prerelease
+      - name: Verify public downloadable asset
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view sura-chat-v0.5.13-user-reference-staging --repo "$GITHUB_REPOSITORY" --json tagName,isPrerelease,assets,url
