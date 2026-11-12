@@ -205,8 +205,7 @@ public final class RoomActivity extends Activity {
         header.addView(back, new LinearLayout.LayoutParams(dp(36), -1));
         back.setOnClickListener(v -> leaveRoom());
 
-        TextView crest = label("S", 27, GOLD, true);
-        crest.setGravity(Gravity.CENTER);
+        View crest = RoyalIcons.view(this, "sura_voice_support", 47, "S");
         crest.setBackground(circle(Color.rgb(64, 44, 105), Color.rgb(19, 21, 56), true));
         header.addView(crest, new LinearLayout.LayoutParams(dp(47), dp(47)));
 
@@ -234,7 +233,7 @@ public final class RoomActivity extends Activity {
         LinearLayout.LayoutParams bannerParams = new LinearLayout.LayoutParams(-1, dp(compact ? 38 : 48));
         bannerParams.setMargins(dp(12), dp(2), dp(12), dp(7));
         root.addView(pinned, bannerParams);
-        TextView horn = label("✦", 20, GOLD, true);
+        View horn = RoyalIcons.view(this, "sura_announcement", 30, "✦");
         pinned.addView(horn, new LinearLayout.LayoutParams(dp(30), -1));
         announcement = label("Room announcement will appear here", 12, WHITE, false);
         announcement.setMaxLines(2);
@@ -270,7 +269,9 @@ public final class RoomActivity extends Activity {
         root.addView(chatBox, chatParams);
 
         LinearLayout chatTitle = horizontal();
-        TextView heading = label("✉  ROOM CHAT", 12, GOLD, true);
+        View chatIcon = RoyalIcons.view(this, "sura_messages", 24, "✉");
+        chatTitle.addView(chatIcon, new LinearLayout.LayoutParams(dp(24), dp(27)));
+        TextView heading = label("  ROOM CHAT", 12, GOLD, true);
         chatTitle.addView(heading, new LinearLayout.LayoutParams(0, dp(27), 1));
         TextView refresh = label("⟳ Refresh", 11, TEAL, false);
         refresh.setGravity(Gravity.RIGHT | Gravity.CENTER_VERTICAL);
@@ -309,6 +310,8 @@ public final class RoomActivity extends Activity {
         footer.setBackgroundColor(BG);
         root.addView(footer, new LinearLayout.LayoutParams(-1, dp(compact ? 48 : 58)));
         String[] names = {"Chat", "Mic off", "Gifts", "Games", "More"};
+        // These icons decorate existing buttons only; voice and gift payments stay disabled.
+        String[] icons = {"sura_messages", "sura_mic_off", "sura_diamond_gift", "", "sura_announcement"};
         View.OnClickListener[] handlers = {
             v -> { chatInput.requestFocus(); },
             v -> checkVoice(),
@@ -318,7 +321,8 @@ public final class RoomActivity extends Activity {
         };
         for (int i = 0; i < names.length; i++) {
             Button b = action(names[i], i == 1);
-            b.setTextSize(compact ? 10 : 12);
+            b.setTextSize(compact ? 9 : 10);
+            RoyalIcons.decorateButton(this, b, icons[i], compact ? 17 : 21, true);
             LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, dp(compact ? 42 : 49), 1);
             lp.setMargins(dp(2), 0, dp(2), 0);
             footer.addView(b, lp);
