@@ -88,7 +88,7 @@ public final class RoomActivity extends Activity {
             // Backward compatible: legacy Worker may return 404 until deployed.
             if ((++presenceTick % 6) == 1) api.post("/api/v1/rooms/" + roomId + "/heartbeat", new JSONObject(), (status, body) -> {
                 if (status == 403 && "join_room_first".equals(body.optString("error"))) {
-                    Toast.makeText(this, "Room session expired. Rejoin.", Toast.LENGTH_SHORT).show();
+                    Toast.makeText(RoomActivity.this, "Room session expired. Rejoin.", Toast.LENGTH_SHORT).show();
                     finish();
                 }
             });
