@@ -139,3 +139,33 @@ test('session persistence retains late-401 and safe room logout protections',()=
  assert.match(html,/async function leave\(targetTab="rooms"\)/);
  assert.match(html,/S\.authGeneration\+\+/);
 });
+
+
+test('user-provided SURA Royal mobile reference layout replaces assistant-created home',()=>{
+ const home=html.slice(html.indexOf('if(S.tab==="home")x.innerHTML='),html.indexOf('else if(S.tab==="rooms")'));
+ assert.match(home,/Join Live Voice Rooms/);
+ assert.match(home,/Talk · Connect · Make Friends/);
+ assert.match(home,/Featured Voice Rooms/);
+ assert.match(home,/Trending Hosts/);
+ assert.match(home,/refImg\("crown",88\)/);
+ assert.doesNotMatch(home,/Find your people/);
+ assert.doesNotMatch(home,/class="big"/);
+ assert.match(html,/const REF_ICONS=\{/);
+ assert.match(html,/id="headerAvatar"/);
+ assert.match(html,/width:100dvh|height:100dvh/);
+ assert.match(html,/#main\{flex:1 1 0%/);
+ assert.match(html,/#room \.rbar\{flex:0 0 auto;display:grid;grid-template-columns:repeat\(3/);
+});
+test('reference room has six real or explicitly disabled actions, not fake gifts or micropayments',()=>{
+ assert.match(html,/data-act="messageFocus"/);
+ assert.match(html,/data-act="roomQuickMenu"/);
+ assert.match(html,/data-act="roomRewards"/);
+ assert.match(html,/data-act="roomGiftPreview"/);
+ assert.match(html,/data-act="leave"/);
+ assert.match(html,/Preview only · Gift sending is not enabled on staging/);
+ assert.match(html,/Room rewards are not active/);
+ assert.match(html,/room_moderator_required/);
+ assert.doesNotMatch(html,/coins:328500/);
+ assert.doesNotMatch(html,/var U=\[\['Luna'/);
+ assert.doesNotMatch(html,/function play\(\)/);
+});
