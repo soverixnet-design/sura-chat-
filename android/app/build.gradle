@@ -7,15 +7,15 @@ android {
         applicationId 'com.soverixnet.surachat'
         minSdk 26
         targetSdk 35
-        versionCode 3
-        versionName '0.3.0-royal-staging'
+        versionCode 4
+        versionName '0.4.0-html-api-staging'
     }
     buildTypes {
         debug {
             buildConfigField 'String', 'API_BASE_URL', '"https://sura-chat-api-staging.soverixnet.workers.dev"'
         }
         release {
-            // Fail closed until a production SURA backend is configured and approved.
+            // Production backend not validated: fails closed.
             buildConfigField 'String', 'API_BASE_URL', '""'
             minifyEnabled false
         }
