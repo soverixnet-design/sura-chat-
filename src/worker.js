@@ -811,6 +811,33 @@ async function listRooms(request, env, url) {
   return json({ rooms: rows.results ?? [], count: rows.results?.length ?? 0 });
 }
 
+/**
+ * Read-only rankings from real room join audit events, not gifts or coins.
+ * Closed rooms are excluded and repeat joins count as repeat entries.
+ */
+async function roomActivityRanking(request, env, url) {
+  const period = url.searchParams.get('period') || 'weekly';
+  const country = String(url.searchParams.get('country') || '').trim().toUpperCase();
+  const windows = { daily: '-1 day', weekly: '-7 days', monthly: '-30 days' };
+  if (!Object.prototype.hasOwnProperty.call(windows, period) ||
+      (country && !/^[A-Z]{2}$/.test(country))) throw new HttpError(400, 'invalid_rank_filter');
+  const cutoff = windows[period]; // fixed server whitelist; no SQL from input
+  const { results } = await env.DB.prepare(`SELECT r.id, r.name, r.country_code, r.seat_count,
+      COUNT(e.id) AS join_events, COUNT(DISTINCT e.actor_user_id) AS unique_visitors
+    FROM rooms r
+    LEFT JOIN room_audit_events e ON e.room_id = r.id AND e.action = 'join'
+      AND e.created_at >= datetime('now', '${cutoff}')
+    WHERE r.status != 'closed' AND (? = '' OR r.country_code = ?)
+    GROUP BY r.id
+    ORDER BY join_events DESC, unique_visitors DESC, r.created_at DESC
+    LIMIT 20`).bind(country, country).all();
+  return json({ period, metric: 'room_entries', rooms: (results || []).map(r => ({
+    id: r.id, name: r.name, country_code: r.country_code,
+    seat_count: r.seat_count, join_events: Number(r.join_events || 0),
+    unique_visitors: Number(r.unique_visitors || 0)
+  })) });
+}
+
 async function moderationContext(request, env, roomId, ownerOnly = false) {
   const user = await currentUser(request, env);
   await rateLimit(request, env, 'room-moderation');
@@ -1039,6 +1066,7 @@ export default {
       if (path === '/api/v1/rooms') {
         return await listRooms(request, env, url);
       }
+      if (path === '/api/v1/rankings/rooms') return await roomActivityRanking(request, env, url);
       if (path === '/api/v1/moments') return await listMoments(request, env, url);
       if (path === '/api/v1/messages/threads') return await directInbox(request, env);
       const dmGetMatch = /^\/api\/v1\/messages\/([0-9]{7,8})$/.exec(path);
