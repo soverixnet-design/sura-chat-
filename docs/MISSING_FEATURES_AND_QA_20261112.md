@@ -104,3 +104,18 @@ The owner-supplied Royal/Purple/Gold 3D mobile design is retained and synchroniz
 - Strict-inheritance Cloudflare staging Worker version `d7bb961f-f874-4810-8d39-ba562176640d` deployed using deployment `e7eb54cf-97f4-4621-9d75-efa17ad3576d`. Verified D1, R2, RTK token and all eight existing bindings survived. No D1 migration or user record edits.
 - Live staging unauthenticated endpoint smoke, including room ranking result shapes/invalid periods, passed: https://github.com/soverixnet-design/sura-chat-/actions/runs/43312076374.
 - Still absent: real 2-phone voice audibility and background voice guarantee, Google identity provider and recovery, Play Billing, verified coin ledger and gifting, admin coin grants, BD/host, CP, monetized rankings/weekly rewards, playable coin games, full Play release, and secured production backend. Owner reference UI remains in place.
+
+## Account security implementation — 13 Nov 2026 (dedicated SURA staging)
+
+- Added `POST /api/v1/auth/change-password`: requires an authenticated session and correct existing PIN/password, plus a new password of 10–64 characters with at least one letter and one digit. Old eight-digit signup PINs continue working for existing accounts; upgrades are voluntary.
+- New random salt and PBKDF2 credentials are stored in the existing credential table with a conditional update matching the old password hash. Current session stays active; other device sessions are revoked. There is no login or profile endpoint leaking a password hash.
+- Added `POST /api/v1/auth/revoke-other-sessions`: also verifies the current password and preserves the requesting session while revoking other tokens.
+- The owner's original Royal profile has a collapsible **Account Security · Password & Devices** panel; `web/index.html` and the Android asset remain byte-identical.
+- No new D1 migration, existing SURA account row, purchase/coin transfer or Sharika data change was required.
+- API/source contract tests successful: https://github.com/soverixnet-design/sura-chat-/actions/runs/43317822303
+- Android debug build successful: https://github.com/soverixnet-design/sura-chat-/actions/runs/43317822275
+- Live staging anonymous endpoint protection smoke successful: https://github.com/soverixnet-design/sura-chat-/actions/runs/43318135414
+- New staging Worker version `08956b93-1044-4a0d-9f08-fef28f8ce339`, deployed via `f43fa48e-3cdf-4402-a36c-707f582ffcdf` with all eight prior bindings retained. This is staging only, not production.
+- CI APK artifact is an installable **debug** APK, not Play production AAB. Device-level success was not demonstrated from CI.
+- Still outstanding: verified Google sign-in and secure recovery provider, strong-password *new signup* migration (the eight-digit signup PIN remains legacy), two physical phones with audible WebRTC voice, Android background audio service, Play privacy/release readiness, gift and wallet ledgers, and full administrative functions.
+- Safety review before production should consider atomic password-update/session-revocation semantics, abuse throttling and credential migration. Never claim Google login or password recovery exists yet.
