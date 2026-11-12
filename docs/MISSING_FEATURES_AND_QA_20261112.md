@@ -119,3 +119,16 @@ The owner-supplied Royal/Purple/Gold 3D mobile design is retained and synchroniz
 - CI APK artifact is an installable **debug** APK, not Play production AAB. Device-level success was not demonstrated from CI.
 - Still outstanding: verified Google sign-in and secure recovery provider, strong-password *new signup* migration (the eight-digit signup PIN remains legacy), two physical phones with audible WebRTC voice, Android background audio service, Play privacy/release readiness, gift and wallet ledgers, and full administrative functions.
 - Safety review before production should consider atomic password-update/session-revocation semantics, abuse throttling and credential migration. Never claim Google login or password recovery exists yet.
+
+## Read-only wallet staging implementation & Android emulator QA — 13 Nov 2026
+
+- New authenticated `GET /api/v1/me/wallets` joins SURA `wallets` with `wallet_ledger`, returns balances only from the calling user's rows and at most 20 own ledger history entries. No direct user ID selection from clients. No virtual coins are generated, transferred or credited.
+- Royal Profile → Wallet now displays real ledger balances and history. When no SURA wallet records exist, shows an explicit empty state rather than making up coins. Recharge, withdrawal, gift sending, salary/seller exchange, payment and any wallet writes are still disabled.
+- Executed **read-only** SQL on isolated SURA staging D1 to check both tables and exact SQL shape. Both wallet queries passed with a deliberately non-existent test ID and zero returned wallet rows. No user data or balances altered.
+- Verified API checks: https://github.com/soverixnet-design/sura-chat-/actions/runs/43319286816 and https://github.com/soverixnet-design/sura-chat-/actions/runs/43319583223.
+- Verified Android Debug build: https://github.com/soverixnet-design/sura-chat-/actions/runs/43319286608.
+- Live staging HTTP smoke rejects anonymous wallet reads: https://github.com/soverixnet-design/sura-chat-/actions/runs/43319572441.
+- Cloudflare Worker version `335c017d-74b0-4ad2-b97d-12e6e2c48789` deployed to **SURA staging only** using `5cb87a91-1aef-415f-bfd8-a2d9da5e6983`. All eight bindings, including the RealtimeKit private token, retained.
+- Android emulator instrumentation job passed https://github.com/soverixnet-design/sura-chat-/actions/runs/43318559771, covering secure WebView origin and staging signup/logout/login/profile/rooms (the test generates synthetic *staging QA* accounts). It does NOT prove voice audibility between two physical phones, password rotation on Android, a wallet with real money, or Google identity provider.
+- Temporarily enabled Android-emulator workflow on this branch for runtime verification, then restored manual dispatch to avoid starting multiple expensive emulator jobs on every HTML edit. Other previously triggered jobs may finish separately.
+- The installable APK is an Android **debug** build with the Royal HTML and staging API, not a release-signed AAB. Main and production remain unchanged; PR #18 should stay draft.
