@@ -249,3 +249,19 @@ test('rooms search across SURA server and profile country is editable',()=>{
   assert.match(html, /name="country_code"/);
   assert.match(html, /country_code:String\(d\.get\("country_code"\)\|\|""\)\.trim\(\)\.toUpperCase\(\)/);
 });
+
+test('moderation UI only uses verified backend data and keeps Royal reference layout',()=>{
+ assert.match(html,/id="editProfile"/);
+ assert.match(html,/Review Reports \(Staff\)/);
+ assert.match(html,/data-value="reports"/);
+ assert.match(html,/data-value="blocked"/);
+ assert.match(html,/\/api\/v1\/me\/reports/);
+ assert.match(html,/\/api\/v1\/me\/blocks/);
+ assert.match(html,/\/api\/v1\/staff\/access/);
+ assert.match(html,/\/api\/v1\/staff\/reports\?status=/);
+ assert.match(html,/class="form report-review"/);
+ assert.match(html,/form\.classList\.contains\("report-review"\)/);
+ assert.match(html,/if\(!access\.moderator\)throw Error/);
+ assert.match(html,/if\(!S\.moderator\)throw Error/);
+ assert.match(html,/S\.moderator=false/);
+});
