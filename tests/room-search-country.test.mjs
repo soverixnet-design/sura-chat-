@@ -26,7 +26,7 @@ test('room search uses bound server-side SQL, not client-only list filtering',as
  assert.deepEqual(res.data.rooms,[]);
  const query=calls.find(c=>c.read);
  assert.match(query.sql,/instr\(lower\(r\.name\), lower\(\?\)\) > 0/);
- assert.deepEqual(query.params.slice(-6),['BD','BD','Golden','Golden','',21,0]);
+ assert.deepEqual(query.params.slice(-7),['BD','BD','Golden','Golden','',21,0]);
 });
 test('room search rejects excessive input',async()=>{
  const {env}=envAndLog();
