@@ -9,6 +9,8 @@ import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
+import android.os.Build;
+import android.view.WindowInsets;
 import android.os.Handler;
 import android.os.Looper;
 import android.text.InputFilter;
@@ -43,12 +45,12 @@ import java.util.concurrent.Executors;
  * All room and permission mutations are enforced by the SURA staging API.
  */
 public final class RoomActivity extends Activity {
-    private static final int BG = Color.rgb(16, 19, 41);
-    private static final int PURPLE = Color.rgb(49, 32, 75);
-    private static final int GOLD = Color.rgb(233, 190, 104);
+    private static final int BG = RoyalTheme.NAVY;
+    private static final int PURPLE = RoyalTheme.PANEL;
+    private static final int GOLD = RoyalTheme.GOLD;
     private static final int TEAL = Color.rgb(47, 214, 209);
-    private static final int WHITE = Color.rgb(247, 246, 251);
-    private static final int MUTED = Color.rgb(194, 185, 211);
+    private static final int WHITE = RoyalTheme.CREAM;
+    private static final int MUTED = RoyalTheme.MUTED;
     private static final int RED = Color.rgb(244, 123, 142);
 
     private final ApiClient api = new ApiClient();
@@ -190,12 +192,21 @@ public final class RoomActivity extends Activity {
     private void createScreen() {
         boolean compact = height() < 530;
         LinearLayout root = vertical();
-        root.setBackground(surface(BG, Color.rgb(29, 18, 52), 0, false));
+        root.setBackground(surface(BG, Color.rgb(34, 13, 60), 0, false));
+        if (Build.VERSION.SDK_INT >= 30) {
+            root.setOnApplyWindowInsetsListener((v,insets)->{
+                android.graphics.Insets bars=insets.getInsets(WindowInsets.Type.systemBars());
+                v.setPadding(0,bars.top,0,bars.bottom);
+                return insets;
+            });
+        } else {
+            root.setFitsSystemWindows(true);
+        }
         setContentView(root);
 
         LinearLayout header = horizontal();
         header.setPadding(dp(14), dp(compact ? 7 : 13), dp(14), dp(10));
-        header.setBackground(surface(Color.rgb(31, 27, 62), PURPLE, 20, false));
+        header.setBackground(RoyalTheme.bg(this,true,20));
         LinearLayout.LayoutParams hparams = new LinearLayout.LayoutParams(-1, dp(compact ? 75 : 92));
         hparams.setMargins(dp(9), dp(6), dp(9), dp(6));
         root.addView(header, hparams);
@@ -211,7 +222,7 @@ public final class RoomActivity extends Activity {
 
         LinearLayout titles = vertical();
         titles.setPadding(dp(12), 0, 0, 0);
-        TextView eyebrow = label("SURA CHAT  ·  ROYAL LOUNGE", 10, TEAL, true);
+        TextView eyebrow = label("✦ SURA CHAT · ROYAL VOICE ROOM", 10, GOLD, true);
         titles.addView(eyebrow);
         headerName = label(roomName, compact ? 16 : 19, WHITE, true);
         headerName.setSingleLine(true);
@@ -229,7 +240,7 @@ public final class RoomActivity extends Activity {
 
         LinearLayout pinned = horizontal();
         pinned.setPadding(dp(12), dp(7), dp(12), dp(7));
-        pinned.setBackground(surface(Color.rgb(50, 39, 72), Color.rgb(63, 42, 82), 12, false));
+        pinned.setBackground(RoyalTheme.bg(this,true,13));
         LinearLayout.LayoutParams bannerParams = new LinearLayout.LayoutParams(-1, dp(compact ? 38 : 48));
         bannerParams.setMargins(dp(12), dp(2), dp(12), dp(7));
         root.addView(pinned, bannerParams);
@@ -249,21 +260,21 @@ public final class RoomActivity extends Activity {
         seatScroller.addView(stage);
         LinearLayout stageTitle = horizontal();
         stageTitle.setPadding(dp(10), dp(2), dp(10), dp(3));
-        stageTitle.addView(label("✧  THE ROYAL STAGE", 12, GOLD, true),
+        stageTitle.addView(label("♛  THE ROYAL STAGE", 13, GOLD, true),
                 new LinearLayout.LayoutParams(0, dp(34), 1));
         seatStatus = label("Select a seat to participate", 11, MUTED, false);
         seatStatus.setGravity(Gravity.RIGHT | Gravity.CENTER_VERTICAL);
         stageTitle.addView(seatStatus, new LinearLayout.LayoutParams(0, dp(34), 1));
         stage.addView(stageTitle);
         seatStage = vertical();
-        seatStage.setBackground(surface(Color.rgb(26, 20, 52), Color.rgb(42, 31, 75), 25, false));
+        seatStage.setBackground(RoyalTheme.bg(this,true,24));
         seatStage.setPadding(dp(3), dp(7), dp(3), dp(8));
         stage.addView(seatStage, new LinearLayout.LayoutParams(-1, -2));
         stage.addView(label("♢  Seats update without reloading the room", 11, MUTED, false));
 
         LinearLayout chatBox = vertical();
         chatBox.setPadding(dp(10), dp(6), dp(10), dp(6));
-        chatBox.setBackground(surface(Color.rgb(30, 26, 57), Color.rgb(36, 25, 64), 16, true));
+        chatBox.setBackground(RoyalTheme.bg(this,true,17));
         LinearLayout.LayoutParams chatParams = new LinearLayout.LayoutParams(-1, dp(compact ? 112 : 176));
         chatParams.setMargins(dp(8), dp(2), dp(8), dp(5));
         root.addView(chatBox, chatParams);
@@ -273,7 +284,7 @@ public final class RoomActivity extends Activity {
         chatTitle.addView(chatIcon, new LinearLayout.LayoutParams(dp(24), dp(27)));
         TextView heading = label("  ROOM CHAT", 12, GOLD, true);
         chatTitle.addView(heading, new LinearLayout.LayoutParams(0, dp(27), 1));
-        TextView refresh = label("⟳ Refresh", 11, TEAL, false);
+        TextView refresh = label("⟳ Refresh", 11, GOLD, false);
         refresh.setGravity(Gravity.RIGHT | Gravity.CENTER_VERTICAL);
         refresh.setOnClickListener(v -> { refreshSeats(); refreshMessages(); });
         chatTitle.addView(refresh);
@@ -307,7 +318,7 @@ public final class RoomActivity extends Activity {
 
         LinearLayout footer = horizontal();
         footer.setPadding(dp(9), 0, dp(9), dp(5));
-        footer.setBackgroundColor(BG);
+        footer.setBackground(RoyalTheme.bg(this,false,17));
         root.addView(footer, new LinearLayout.LayoutParams(-1, dp(compact ? 48 : 58)));
         String[] names = {"Chat", "Mic off", "Gifts", "Games", "More"};
         // These icons decorate existing buttons only; voice and gift payments stay disabled.
@@ -405,8 +416,8 @@ public final class RoomActivity extends Activity {
             TextView avatar = label(locked ? "🔒" : taken ? initials(occupant) : "+", taken ? 22 : 25,
                     taken ? GOLD : MUTED, true);
             avatar.setGravity(Gravity.CENTER);
-            avatar.setBackground(circle(locked ? Color.rgb(46, 40, 66) : taken ? Color.rgb(103, 61, 139) : Color.rgb(39, 32, 65),
-                    taken ? Color.rgb(54, 41, 91) : Color.rgb(23, 23, 50), mine));
+            avatar.setBackground(circle(locked ? Color.rgb(49, 32, 71) : taken ? Color.rgb(121, 52, 163) : Color.rgb(57, 28, 85),
+                    taken ? Color.rgb(44, 19, 83) : Color.rgb(19, 14, 47), mine));
             avatarHolder.addView(avatar, new FrameLayout.LayoutParams(-1, -1));
             if (taken && !avatarKey.isEmpty()) loadAvatar(avatarHolder, userId, avatarKey, maxSeatDiameter);
 
@@ -754,10 +765,26 @@ public final class RoomActivity extends Activity {
             if (status != 200) { showError(status, json); return; }
             JSONObject user = json.optJSONObject("user");
             if (user == null) return;
-            info(user.optString("display_name", "Member"),
-                    "ID: " + user.optString("public_id", "") +
-                    "\nCountry: " + user.optString("country_code", "") +
-                    "\nBio: " + user.optString("bio", ""));
+            String name = user.optString("display_name", "Member");
+            LinearLayout profile = RoyalTheme.framed(this);
+            profile.setPadding(dp(18),dp(18),dp(18),dp(16));
+            LinearLayout identity = horizontal();
+            identity.addView(RoyalTheme.avatar(this,RoyalTheme.initials(name)),
+                    new LinearLayout.LayoutParams(dp(70),dp(70)));
+            LinearLayout detail = vertical();
+            detail.setPadding(dp(14),0,0,0);
+            detail.addView(RoyalTheme.text(this,"♛ "+name,20,GOLD,true));
+            detail.addView(RoyalTheme.text(this,"SURA ID: "+user.optString("public_id",""),13,WHITE,false));
+            detail.addView(RoyalTheme.text(this,"Country: "+user.optString("country_code","Global"),12,MUTED,false));
+            identity.addView(detail,new LinearLayout.LayoutParams(0,-2,1));
+            profile.addView(identity);
+            profile.addView(RoyalTheme.title(this,"About",""));
+            String bio=user.optString("bio","");
+            profile.addView(RoyalTheme.text(this,bio.isEmpty()?"No bio yet":bio,13,WHITE,false));
+            profile.addView(RoyalTheme.title(this,"Royal profile","VIP, CP and Nobles appear when server-backed"));
+            profile.addView(RoyalTheme.text(this,"This user profile shows only verified account details. Additional badges are not active.",11,MUTED,false));
+            new AlertDialog.Builder(this).setView(profile).setNegativeButton("Close",null)
+                    .setPositiveButton("Message",(dialog,which)->privateMessage(id)).show();
         });
     }
 
