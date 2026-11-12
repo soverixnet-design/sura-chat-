@@ -203,3 +203,15 @@ test('room member popup loads actual profile and leaves voice active until messa
   assert.match(html, /if\(!E\("memberProfileSheet"\)\.hidden\)\{closeMemberProfile\(\);return true;\}/);
   assert.doesNotMatch(html, /confirm\(r\.user\.display_name/);
 });
+
+test('background room presence and late navigation responses stay safe', () => {
+  assert.match(html, /navigationSeq:0/);
+  assert.match(html, /requestSeq=\+\+S\.navigationSeq/);
+  assert.match(html, /requestToken!==S\.token\|\|requestSeq!==S\.navigationSeq/);
+  assert.match(html, /if\(a==="authTab"\)\{S\.authGeneration\+\+/);
+  assert.match(html, /document\.addEventListener\("visibilitychange"/);
+  assert.match(html, /if\(document\.hidden\)\{/);
+  assert.match(html, /clearInterval\(S\.poll\);S\.poll=null;/);
+  assert.match(html, /void heartbeat\(\); \/\/ Validate membership immediately after app resumes/);
+  assert.match(html, /if\(!S\.heartbeatUnsupported&&!S\.heartbeatTimer\)/);
+});
