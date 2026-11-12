@@ -28,6 +28,8 @@ test('auth, real rooms, messages, profile and moments use SURA API', () => {
 test('the Android debug launcher is local and production fails closed', () => {
     assert.ok(manifest.includes('RoyalWebActivity'));
     assert.ok(java.includes('BuildConfig.DEBUG'));
-    assert.ok(java.includes('loadDataWithBaseURL'));
+    assert.ok(java.includes('webView.loadUrl(APP_URL)'));
+    assert.ok(java.includes('WebViewAssetLoader'));
+    assert.ok(!java.includes('loadDataWithBaseURL'));
     assert.ok(!java.includes('setAllowUniversalAccessFromFileURLs(true)'));
 });
