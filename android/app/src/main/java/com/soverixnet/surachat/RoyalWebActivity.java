@@ -112,7 +112,7 @@ public final class RoyalWebActivity extends Activity {
             webView = new WebView(this);
             WebSettings settings = webView.getSettings();
             settings.setJavaScriptEnabled(true);
-            settings.setDomStorageEnabled(false);
+            settings.setDomStorageEnabled(true); // SURA session token only, in Android's private app WebView storage.
             settings.setAllowFileAccess(false);
             settings.setAllowContentAccess(true); // Required for explicit user-selected gallery content:// URI only.
             settings.setAllowFileAccessFromFileURLs(false);

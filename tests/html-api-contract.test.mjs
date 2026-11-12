@@ -13,7 +13,7 @@ test('the bundled design matches the web source', () => {
     assert.match(html, /class="card banner"/);
 });
 test('no demo coin spending, fake users or randomized winners', () => {
-    for (const bad of ['coins:328500', "['Luna'", 'Google (demo)', 'Apple (demo)', 'Math.random()', 'localStorage.setItem', 'onclick="buy(']) {
+    for (const bad of ['coins:328500', "['Luna'", 'Google (demo)', 'Apple (demo)', 'Math.random()', 'onclick="buy(']) {
         assert.equal(html.includes(bad), false, 'demo retained: ' + bad);
     }
 });
@@ -95,4 +95,23 @@ test('SURA profile photo uses real R2 WebP endpoint and in-room seat avatar upda
  assert.match(java, /"content"\.equals\(selected\.getScheme\(\)\)/);
  assert.match(java, /mime\.startsWith\("image\/"\)/);
  assert.doesNotMatch(java, /ACTION_GET_MULTIPLE_CONTENTS/);
+});
+
+
+test('SURA session persists only opted-in short-lived bearer token, not password or demo coins',()=>{
+ assert.match(html,/const AUTH_STORAGE_KEY="sura.auth.session.v1"/);
+ assert.match(html,/function readSavedLogin\(\)/);
+ assert.match(html,/localStorage.getItem\(AUTH_STORAGE_KEY\)/);
+ assert.match(html,/localStorage.setItem\(AUTH_STORAGE_KEY,JSON.stringify\(\{token,expires_at:/);
+ assert.match(html,/function forgetSavedLogin\(\)/);
+ assert.match(html,/name="remember" checked/);
+ assert.match(html,/if\(d.get\("remember"\)==="on"\)rememberLogin\(r.token,r.expires_in\);else forgetSavedLogin\(\)/);
+ assert.match(html,/async function restoreSavedLogin\(\)/);
+ assert.match(html,/fetch\(API\+"\/api\/v1\/me"/);
+ assert.match(html,/if\(res.status===401\)\{forgetSavedLogin\(\);throw Error\("session_expired"\)/);
+ assert.match(html,/showLogin\(true\)/);
+ assert.match(html,/showLogin\(\);void restoreSavedLogin\(\)/);
+ assert.match(java,/settings.setDomStorageEnabled\(true\)/);
+ assert.doesNotMatch(html,/localStorage\.setItem\(["']password/);
+ assert.doesNotMatch(html,/localStorage\.setItem\(["']coins/);
 });
