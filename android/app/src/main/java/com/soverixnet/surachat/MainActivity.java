@@ -1,6 +1,7 @@
 package com.soverixnet.surachat;
 
 import android.app.Activity;
+import android.content.Intent;
 import android.os.Bundle;
 import android.graphics.Color;
 import android.graphics.Typeface;
@@ -33,10 +34,24 @@ public final class MainActivity extends Activity {
     private String activeRoom = null;
     private String activeRoomName = "";
     private String view = "login";
+    private boolean returningFromRoom = false;
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
         showAuth(false);
+    }
+
+    @Override protected void onResume() {
+        super.onResume();
+        if (returningFromRoom && api.signedIn()) {
+            returningFromRoom = false;
+            showRooms("all", "popular");
+        }
+    }
+
+    @Override protected void onDestroy() {
+        api.close();
+        super.onDestroy();
     }
 
     private int dp(int value) { return (int)(getResources().getDisplayMetrics().density * value + 0.5f); }
@@ -217,7 +232,7 @@ public final class MainActivity extends Activity {
                 String name = room.optString("name", "Voice room");
                 p.addView(button("🎙 " + name + "  ·  " + room.optString("country_code", "Global")
                         + "  ·  " + room.optInt("active_count", 0) + " online",
-                        v -> joinRoom(id, name)));
+                        v -> joinRoom(id, name, room.optString("country_code", ""))));
             }
         });
     }
@@ -236,115 +251,32 @@ public final class MainActivity extends Activity {
                     if (code != 201) { error(code, json); return; }
                     JSONObject room = json.optJSONObject("room");
                     if (room == null) { notifyUser("Missing room response"); return; }
-                    openRoom(room.optString("id"), room.optString("name"));
+                    openRoom(room.optString("id"), room.optString("name"), room.optString("country_code", ""));
                 });
             } catch (Exception ex) { notifyUser("Choose a name and valid seat count."); }
         }));
     }
 
-    private void joinRoom(String roomId, String title) {
+    private void joinRoom(String roomId, String title, String roomCountry) {
         api.post("/api/v1/rooms/" + roomId + "/join", new JSONObject(), (code, body) -> {
             if (code != 200) { error(code, body); return; }
-            openRoom(roomId, title);
+            openRoom(roomId, title, roomCountry);
         });
     }
 
-    private void openRoom(String roomId, String title) {
-        activeRoom = roomId;
-        activeRoomName = title;
-        view = "room";
-        LinearLayout p = page("🎙 " + title);
-        p.addView(text("Room voice stays disabled in this prototype until RTC SDK integration and on-device verification.", 13, MUTED));
-        p.addView(button("Refresh seats", v -> openRoom(roomId, title)));
-        p.addView(button("Check voice eligibility", v -> {
-            api.get("/api/v1/rooms/" + roomId + "/voice/status", (status, response) -> {
-                if (status != 200) { error(status, response); return; }
-                notifyUser("Seat: " + response.optString("seat", "none")
-                    + " · Role: " + response.optString("role", "listener")
-                    + " · RTC configured: " + response.optBoolean("configured", false));
-            });
-        }));
-        LinearLayout seatHost = new LinearLayout(this);
-        seatHost.setOrientation(LinearLayout.VERTICAL);
-        p.addView(seatHost);
-        api.get("/api/v1/rooms/" + roomId + "/seats", (status, result) -> {
-            if (status != 200) { error(status, result); return; }
-            JSONObject detail = result.optJSONObject("room");
-            if (detail != null) p.addView(text("📢 " + detail.optString("announcement", ""), 13, GOLD));
-            JSONArray seats = result.optJSONArray("seats");
-            if (seats == null) return;
-            LinearLayout row = null;
-            for (int i = 0; i < seats.length(); i++) {
-                JSONObject seat = seats.optJSONObject(i);
-                if (seat == null) continue;
-                if (i % 4 == 0) {
-                    row = new LinearLayout(this);
-                    row.setOrientation(LinearLayout.HORIZONTAL);
-                    seatHost.addView(row);
-                }
-                int number = seat.optInt("seat_number");
-                boolean locked = seat.optInt("is_locked") != 0;
-                String occupant = seat.optString("display_name", "");
-                if ("null".equals(occupant)) occupant = "";
-                String titleSeat = locked ? "🔒 " + number :
-                    occupant.isEmpty() ? "○ " + number : "● " + occupant;
-                Button b = button(titleSeat, v -> {
-                    if (locked || !seat.isNull("user_id") && seat.has("user_id")) return;
-                    if (!seat.optString("public_id", "").isEmpty() && !"null".equals(seat.optString("public_id"))) return;
-                    api.post("/api/v1/rooms/" + roomId + "/seats/" + number, new JSONObject(), (code, body) -> {
-                        if (code == 200) { notifyUser("Seat " + number + " selected."); openRoom(roomId, activeRoomName); }
-                        else error(code, body);
-                    });
-                });
-                b.setTextSize(11);
-                if (row != null) {
-                    LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, dp(65), 1);
-                    lp.setMargins(dp(2), dp(5), dp(2), dp(5));
-                    row.addView(b, lp);
-                }
-            }
-        });
-        p.addView(button("Stand up", v -> api.post("/api/v1/rooms/" + roomId + "/stand",
-                new JSONObject(), (code, result) -> {
-                    if (code == 200) openRoom(roomId, title);
-                    else error(code, result);
-                })));
-        TextView recent = text("Room chat (only messages since your join)", 13, MUTED);
-        p.addView(recent);
-        EditText message = field(p, "Type a room message", InputType.TYPE_CLASS_TEXT, "");
-        p.addView(button("Send message", v -> {
-            if (typed(message).isEmpty()) return;
-            try {
-                api.post("/api/v1/rooms/" + roomId + "/messages",
-                        new JSONObject().put("message", typed(message)), (code, body) -> {
-                    if (code == 201 || code == 200) { message.setText(""); notifyUser("Sent"); }
-                    else error(code, body);
-                });
-            } catch (Exception ignored) { }
-        }));
-        p.addView(button("Load chat", v -> api.get("/api/v1/rooms/" + roomId + "/messages?after=0",
-                (code, result) -> {
-                    if (code != 200) { error(code, result); return; }
-                    JSONArray messages = result.optJSONArray("messages");
-                    if (messages == null) { recent.setText("No messages"); return; }
-                    StringBuilder sb = new StringBuilder();
-                    for (int i = 0; i < messages.length(); i++) {
-                        JSONObject m = messages.optJSONObject(i);
-                        if (m != null) sb.append(m.optString("body", "")).append("\n");
-                    }
-                    recent.setText(sb.length() == 0 ? "No messages" : sb.toString());
-                })));
-        p.addView(button("Leave room", v -> leaveRoom()));
-    }
-
-    private void leaveRoom() {
-        String leaving = activeRoom;
-        activeRoom = null;
-        if (leaving == null) { showRooms("all", "popular"); return; }
-        api.post("/api/v1/rooms/" + leaving + "/leave", new JSONObject(), (code, body) -> {
-            if (code != 200) { error(code, body); }
-            showRooms("all", "popular");
-        });
+    private void openRoom(String roomId, String title, String roomCountry) {
+        if (roomId == null || !roomId.matches("[0-9a-fA-F-]{36}") || !api.signedIn()) {
+            notifyUser("Room or session unavailable");
+            return;
+        }
+        Intent intent = new Intent(this, RoomActivity.class);
+        intent.putExtra("room_id", roomId);
+        intent.putExtra("room_name", title);
+        intent.putExtra("country", roomCountry);
+        intent.putExtra("public_id", publicId);
+        intent.putExtra("token", api.getSession());
+        returningFromRoom = true;
+        startActivity(intent);
     }
 
     private void showMessages() {
@@ -399,8 +331,7 @@ public final class MainActivity extends Activity {
     }
 
     @Override public void onBackPressed() {
-        if ("room".equals(view)) leaveRoom();
-        else if (!"login".equals(view)) showRooms("all", "popular");
+        if (!"login".equals(view)) showRooms("all", "popular");
         else super.onBackPressed();
     }
 }
