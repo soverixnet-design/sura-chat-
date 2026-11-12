@@ -286,20 +286,36 @@ public final class MainActivity extends Activity {
         LinearLayout p = shell("Create a room");
         EditText name = field(p, "Room title", InputType.TYPE_CLASS_TEXT, "");
         EditText seats = field(p, "Seats: 4, 8, 12 or 16", InputType.TYPE_CLASS_NUMBER, "8");
-        p.addView(text("Nobody sits automatically, including the owner.", 13, MUTED));
-        p.addView(button("Create room", v -> {
+        p.addView(text("Choose a stage layout. The owner does not sit automatically.", 13, MUTED));
+        Button createButton = button("✦  Create Royal Room", null);
+        p.addView(createButton);
+        createButton.setOnClickListener(v -> {
+            String roomTitle = typed(name);
+            String count = typed(seats);
+            if (roomTitle.length() < 3 || roomTitle.length() > 64 ||
+                    !("4".equals(count) || "8".equals(count) ||
+                      "12".equals(count) || "16".equals(count))) {
+                notifyUser("Room title: 3–64 characters. Seats: 4, 8, 12 or 16.");
+                return;
+            }
             try {
                 JSONObject request = new JSONObject()
-                    .put("name", typed(name)).put("seat_count", Integer.parseInt(typed(seats)));
+                    .put("name", roomTitle).put("seat_count", Integer.parseInt(count));
                 if (!country.isEmpty()) request.put("country_code", country);
+                createButton.setEnabled(false);
+                createButton.setText("Creating room…");
                 api.post("/api/v1/rooms", request, (code, json) -> {
+                    createButton.setEnabled(true);
+                    createButton.setText("✦  Create Royal Room");
+                    if (isFinishing() || isDestroyed()) return;
                     if (code != 201) { error(code, json); return; }
                     JSONObject room = json.optJSONObject("room");
-                    if (room == null) { notifyUser("Missing room response"); return; }
-                    openRoom(room.optString("id"), room.optString("name"), room.optString("country_code", ""));
+                    if (room == null) { notifyUser("Room creation response was empty"); return; }
+                    openRoom(room.optString("id"), room.optString("name"),
+                            room.optString("country_code", ""));
                 });
-            } catch (Exception ex) { notifyUser("Choose a name and valid seat count."); }
-        }));
+            } catch (Exception ex) { notifyUser("Could not create room"); }
+        });
     }
 
     private void joinRoom(String roomId, String title, String roomCountry) {
