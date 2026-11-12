@@ -3,6 +3,7 @@ on:
   push:
     branches:
       - 'feature/sura-presence-heartbeat-20261112'
+      - 'feature/sura-user-reference-mobile-ui-20261112'
     paths:
       - '.github/workflows/sura-staging-smoke.yml'
   workflow_dispatch:
@@ -58,6 +59,16 @@ jobs:
           status, data = check('/api/v1/rooms')
           assert status == 200 and isinstance(data.get('rooms'), list), (status, data)
           print('OK rooms: real API returns data, count=', data.get('count'))
+
+          status, data = check('/api/v1/rooms?q=royal&country=BD')
+          assert status == 200 and isinstance(data.get('rooms'), list), (status, data)
+          print('OK named room search: protected SQL filter is live')
+
+          status, data = check('/api/v1/me/blocks')
+          assert status == 401 and data.get('error') == 'login_required', (status, data)
+          status, data = check('/api/v1/reports', method='POST')
+          assert status == 401 and data.get('error') == 'login_required', (status, data)
+          print('OK member safety endpoints reject anonymous access')
 
           status, data = check('/api/v1/me')
           assert status == 401 and data.get('error') == 'login_required', (status, data)
