@@ -8,8 +8,8 @@ android {
         minSdk 26
         targetSdk 35
         testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
-        versionCode 15
-        versionName '0.5.10-session-room-safe-staging'
+        versionCode 16
+        versionName '0.5.11-voice-reconnect-staging'
     }
     buildTypes {
         debug {

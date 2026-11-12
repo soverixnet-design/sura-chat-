@@ -234,7 +234,7 @@ nav button b img{display:block;margin:0 auto 2px;filter:drop-shadow(0 2px 3px #0
 "use strict";
 (function(){
  const API="https://sura-chat-api-staging.soverixnet.workers.dev";
- const S={token:"",user:null,tab:"home",signup:false,rooms:[],moments:[],threads:[],scope:"all",sort:"popular",roomId:"",seatSig:"",after:0,poll:null,heartbeatTimer:null,heartbeatUnsupported:false,roomSyncPromise:null,roomGeneration:0,roomManage:null,authGeneration:0,busy:false,peer:"",peerName:"",dm:[],voice:{meeting:null,roomId:"",role:"",busy:false,generation:0}};
+ const S={token:"",user:null,tab:"home",signup:false,rooms:[],moments:[],threads:[],scope:"all",sort:"popular",roomId:"",seatSig:"",after:0,poll:null,heartbeatTimer:null,heartbeatUnsupported:false,roomSyncPromise:null,roomGeneration:0,roomManage:null,authGeneration:0,busy:false,peer:"",peerName:"",dm:[],voice:{meeting:null,roomId:"",role:"",busy:false,busyGeneration:-1,generation:0}};
  const E=id=>document.getElementById(id);
  const safe=v=>String(v==null?"":v).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
  const fmt=v=>Number(v||0).toLocaleString("en-US");
@@ -415,6 +415,9 @@ nav button b img{display:block;margin:0 auto 2px;filter:drop-shadow(0 2px 3px #0
  async function stopVoice(){
    // Cancel an in-progress token request or SDK join, not only joined calls.
    S.voice.generation++;
+   // Cancel the old in-flight join immediately. A new room must not wait for
+   // a stale RealtimeKit SDK/token promise to settle before it can connect.
+   S.voice.busy=false;S.voice.busyGeneration=-1;
    const meeting=S.voice.meeting;
    S.voice.meeting=null;S.voice.roomId="";S.voice.role="";
    const audio=E("suraVoiceAudio");
@@ -432,7 +435,7 @@ nav button b img{display:block;margin:0 auto 2px;filter:drop-shadow(0 2px 3px #0
      if(S.voice.role!=="speaker"){
        toast("Listening only. Choose a free seat to activate your mic.");return;
      }
-     S.voice.busy=true;
+     S.voice.busy=true;S.voice.busyGeneration=currentGeneration;
      try{
        if(active.self.audioEnabled){
          await active.self.disableAudio();
@@ -449,10 +452,10 @@ nav button b img{display:block;margin:0 auto 2px;filter:drop-shadow(0 2px 3px #0
        }
        if(stillCurrent())voiceStatus(active.self.audioEnabled?"Mute Mic":"Unmute Mic");
      }catch(error){if(stillCurrent()){voiceNet("Microphone error · check permission");toast("Microphone: "+error.message);}}
-     finally{S.voice.busy=false;}
+     finally{if(S.voice.busyGeneration===currentGeneration){S.voice.busy=false;S.voice.busyGeneration=-1;}}
      return;
    }
-   S.voice.busy=true;
+   S.voice.busy=true;S.voice.busyGeneration=currentGeneration;
    voiceStatus("Connecting…");voiceNet("Joining voice · checking audio connection");
    let meeting=null;
    try{
@@ -512,7 +515,8 @@ nav button b img{display:block;margin:0 auto 2px;filter:drop-shadow(0 2px 3px #0
      }
    }finally{
      if(meeting)try{await meeting.leave();}catch(_){}
-     S.voice.busy=false;
+     // An old request must not unlock a newer room’s active Join Voice flow.
+     if(S.voice.busyGeneration===currentGeneration){S.voice.busy=false;S.voice.busyGeneration=-1;}
    }
  }
  async function enter(id){
