@@ -591,6 +591,13 @@ if(S.tab==="home")x.innerHTML=
     '<div class="tabs">'+[["daily","Daily"],["weekly","Weekly"],["monthly","Monthly"]].map(o=>'<button type="button" data-act="rankPeriod" data-value="'+o[0]+'" class="'+(S.rankingPeriod===o[0]?'on':'')+'">'+o[1]+'</button>').join('')+'</div>'+
     (S.rankRooms.length?S.rankRooms.map((r,i)=>'<button type="button" class="card rm" data-act="enter" data-id="'+safe(r.id)+'"><div class="th">'+refImg("medal",42)+'</div><div class="ref-room-copy"><b>#'+(i+1)+' '+safe(r.name)+'</b><p>'+fmt(r.join_events)+' room joins · '+fmt(r.unique_visitors)+' unique visitors</p><small>'+safe(r.country_code||"Global")+'</small></div></button>').join(''):'<div class="card empty">No activity recorded for this period.</div>');
   }
+  else if(S.tab==="wallet"){
+   x.innerHTML='<div class="h"><b>My SURA Wallets</b><button type="button" class="btn" data-act="tab" data-value="profile">Back</button></div>'+
+    '<div class="card"><b>Read-only virtual coins</b><p class="muted">Only real SURA account ledger balances appear here. Buying, sending and exchanging coins are not enabled.</p></div>'+
+    (S.wallets.length?S.wallets.map(w=>'<div class="card"><b>'+safe(w.wallet_type)+' Wallet</b><p>'+(Number.isSafeInteger(w.balance_units)?fmt(w.balance_units):'Unavailable')+' '+safe(w.currency)+'</p><small>'+fmt(w.ledger_entries)+' recorded ledger entries</small></div>').join(''):'<div class="card empty">No SURA wallet records for this account.</div>')+
+    '<div class="h"><b>Recent Wallet History</b></div>'+
+    (S.walletEntries.length?S.walletEntries.map(e=>'<div class="card"><b>'+safe(e.operation)+'</b><p>'+safe(e.wallet_type)+' · '+(Number.isSafeInteger(e.amount_units)?fmt(e.amount_units):'Unavailable')+' coins</p><small>'+safe(e.created_at)+'</small></div>').join(''):'<div class="card empty">No coin transactions recorded.</div>');
+  }
   else if(S.tab==="catalog"){x.innerHTML='<div class="h"><b>Gift Catalog</b></div><div class="card">Preview only — spending and gifts are disabled by SURA backend.</div><div id="catalogResults"></div>';api("/api/v1/gifts?limit=40").then(j=>{if(S.tab==="catalog")E("catalogResults").innerHTML=(j.gifts||[]).map(g=>'<div class="card"><b>'+safe(g.name)+'</b><p>'+fmt(g.price_coins)+' coins · '+safe(g.category)+'</p></div>').join("")||'<div class="card empty">No published gifts.</div>';}).catch(e=>toast(e.message));}
   else x.innerHTML='<div class="h"><b>'+safe(S.tab.toUpperCase())+'</b></div><div class="card"><b>Not connected yet</b><p class="muted">No demo wallets, winnings, rankings or events are displayed. This feature requires audited server support.</p></div>';
  }
