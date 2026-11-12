@@ -151,8 +151,12 @@ async function memberProfile(request, env, publicId) {
     'u.id, u.public_id, u.display_name, u.country_code, u.bio, u.avatar_key');
   if (!user) throw new HttpError(404, 'member_not_found');
   const blockedByMe = user.id !== me.id && await isUserBlocked(env, me.id, user.id);
+  const following = user.id !== me.id && !blockedByMe && Boolean(await env.DB.prepare(
+    'SELECT 1 FROM user_follows WHERE follower_user_id = ? AND followed_user_id = ?'
+  ).bind(me.id, user.id).first());
   const { id: _internalUserId, ...publicInfo } = user;
-  return json({ user: { ...publicInfo, public_id: user.public_id.replace(/^SC(?=\d+$)/, ''), blocked_by_me: blockedByMe } });
+  return json({ user: { ...publicInfo, public_id: user.public_id.replace(/^SC(?=\d+$)/, ''),
+    blocked_by_me: blockedByMe, is_following: following } });
 }
 
 // Block prevents direct messaging and hides blocked users' posts/messages.
@@ -177,6 +181,9 @@ async function updateMyBlocks(request, env) {
   if (data.blocked) {
     await env.DB.prepare('INSERT OR IGNORE INTO user_blocks (blocker_user_id, blocked_user_id, created_at_ms) VALUES (?, ?, ?)')
       .bind(me.id, target.id, Date.now()).run();
+    // A block removes existing follows in both directions, not just the UI.
+    await env.DB.prepare('DELETE FROM user_follows WHERE (follower_user_id = ? AND followed_user_id = ?) OR (follower_user_id = ? AND followed_user_id = ?)')
+      .bind(me.id, target.id, target.id, me.id).run();
   } else {
     await env.DB.prepare('DELETE FROM user_blocks WHERE blocker_user_id = ? AND blocked_user_id = ?')
       .bind(me.id, target.id).run();
@@ -190,6 +197,46 @@ async function listMyBlocks(request, env) {
     WHERE b.blocker_user_id = ? ORDER BY b.created_at_ms DESC LIMIT 100`).bind(me.id).all();
   return json({ blocked_users: (results || []).map(row => ({
     ...row, public_id: row.public_id.replace(/^SC(?=\d+$)/, '')
+  })) });
+}
+
+
+/** Follow is private to the member and works only for active, unblocked SURA accounts.
+ * No gift, CP, coins, follower rewards or fake friend counts are involved.
+ */
+async function updateMyFollowing(request, env) {
+  const me = await currentUser(request, env);
+  await rateLimit(request, env, 'room-user-follow', me.id);
+  const data = await readJson(request);
+  const publicId = String(data.public_id || '').trim();
+  if (!publicIdIsSupported(publicId) || typeof data.follow !== 'boolean') throw new HttpError(400, 'invalid_follow');
+  const peer = await findPublicUser(env, publicId, 'u.id, u.public_id, u.status');
+  if (!peer || peer.status !== 'active') throw new HttpError(404, 'member_not_found');
+  if (peer.id === me.id) throw new HttpError(400, 'cannot_follow_self');
+  if (data.follow && await usersHaveBlockedEachOther(env, me.id, peer.id))
+    throw new HttpError(403, 'member_blocked');
+  if (data.follow) {
+    await env.DB.prepare('INSERT OR IGNORE INTO user_follows (follower_user_id, followed_user_id, created_at_ms) VALUES (?, ?, ?)')
+      .bind(me.id, peer.id, Date.now()).run();
+  } else {
+    await env.DB.prepare('DELETE FROM user_follows WHERE follower_user_id = ? AND followed_user_id = ?')
+      .bind(me.id, peer.id).run();
+  }
+  return json({ success: true, public_id: peer.public_id.replace(/^SC(?=\d+$)/, ''), following: data.follow });
+}
+async function listMyFollowing(request, env) {
+  const me = await currentUser(request, env);
+  const { results } = await env.DB.prepare(`SELECT u.public_id, u.display_name, u.country_code,
+      u.avatar_key, f.created_at_ms FROM user_follows f
+    JOIN users u ON u.id = f.followed_user_id
+    WHERE f.follower_user_id = ? AND u.status = 'active'
+      AND NOT EXISTS (SELECT 1 FROM user_blocks b
+        WHERE (b.blocker_user_id = ? AND b.blocked_user_id = u.id)
+           OR (b.blocker_user_id = u.id AND b.blocked_user_id = ?))
+    ORDER BY f.created_at_ms DESC, u.public_id ASC LIMIT 100`)
+    .bind(me.id, me.id, me.id).all();
+  return json({ following: (results || []).map(r => ({
+    ...r, public_id: r.public_id.replace(/^SC(?=\d+$)/, '')
   })) });
 }
 
@@ -424,9 +471,11 @@ async function signup(request, env) {
   const displayName = String(data.display_name || '').trim();
   const country = String(data.country_code || '').trim().toUpperCase();
   if (!/^[^\s@]{1,64}@[^\s@]{1,190}\.[a-z]{2,20}$/.test(email) ||
-      // SURA signups use exactly eight ASCII digits as requested. Existing
-      // accounts keep their old password hashes and can still log in.
-      typeof password !== 'string' || !/^\d{8}$/.test(password) ||
+      // New accounts use strong passwords with no email OTP. Legacy eight-digit
+      // PINs remain valid for existing logins but are no longer issued.
+      typeof password !== 'string' || password.length < 10 || password.length > 64 ||
+      !/[A-Za-z]/.test(password) || !/[0-9]/.test(password) ||
+      /[\x00-\x1F\x7F]/.test(password) ||
       displayName.length < 2 || displayName.length > 40 ||
       (country && !/^[A-Z]{2}$/.test(country))) throw new HttpError(400, 'invalid_signup');
   if (await env.DB.prepare('SELECT 1 FROM user_credentials WHERE email_normalized = ?').bind(email).first()) {
@@ -1089,6 +1138,7 @@ export default {
         if (path === '/api/v1/me/profile') return await updateMyProfile(request, env);
         if (path === '/api/v1/me/avatar') return await uploadMyAvatar(request, env);
         if (path === '/api/v1/me/blocks') return await updateMyBlocks(request, env);
+        if (path === '/api/v1/me/following') return await updateMyFollowing(request, env);
         if (path === '/api/v1/reports') return await reportMember(request, env);
         const reportReviewMatch = /^\/api\/v1\/staff\/reports\/([0-9a-f-]{36})\/review$/i.exec(path);
         if (reportReviewMatch) return await reviewReport(request, env, reportReviewMatch[1]);
@@ -1130,6 +1180,7 @@ export default {
       }
 
       if (path === '/api/v1/me/blocks') return await listMyBlocks(request, env);
+      if (path === '/api/v1/me/following') return await listMyFollowing(request, env);
       if (path === '/api/v1/me/reports') return await listMyReports(request, env);
       if (path === '/api/v1/staff/access') return await reportStaffAccess(request, env);
       if (path === '/api/v1/staff/reports') return await listReviewQueue(request, env, url);
