@@ -40,3 +40,15 @@ test('remote audio renderer is registered, mounted and cleaned up on room leave'
   assert.match(html, /S\.voice\.generation\+\+/);
   assert.match(html, /stillCurrent\(\)/);
 });
+
+test('real RealtimeKit lifecycle events update voice status and clean up',()=>{
+  assert.match(html, /id="voiceConnection"/);
+  assert.match(html, /mediaConnectionUpdate/);
+  assert.match(html, /roomLeft/);
+  assert.match(html, /S\.voice\.meeting===liveMeeting/);
+  assert.match(html, /S\.voice\.roomId===roomId/);
+  assert.match(html, /endLocalRoom\("Voice session "/);
+  assert.match(html, /showVoiceTransports\(transports\)/);
+  assert.match(html, /voiceNet\("Microphone error/);
+  assert.match(html, /Tap Join Voice to listen/);
+});
