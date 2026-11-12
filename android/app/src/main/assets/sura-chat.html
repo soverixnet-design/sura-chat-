@@ -1101,7 +1101,7 @@ async function openRoomGiftPreview(){
    }
   },400);
  });
- document.addEventListener("submit",async e=>{const form=e.target;if(!form.id)return;e.preventDefault();const d=new FormData(form);const btn=form.querySelector("button[type=submit],button.gold");if(btn)btn.disabled=true;
+ document.addEventListener("submit",async e=>{const form=e.target;if(!form.id&&!form.classList.contains("report-review"))return;e.preventDefault();const d=new FormData(form);const btn=form.querySelector("button[type=submit],button.gold");if(btn)btn.disabled=true;
   try{
    if(form.id==="authForm"){const generation=++S.authGeneration;const payload={email:String(d.get("email")).trim(),password:String(d.get("password"))};if(S.signup){payload.display_name=String(d.get("display_name")).trim();payload.country_code=String(d.get("country_code")).trim().toUpperCase();}if(btn)btn.textContent=S.signup?"Creating account…":"Signing in…";const r=await api(S.signup?"/api/v1/auth/signup":"/api/v1/auth/login","POST",payload);if(generation!==S.authGeneration)return;if(!r||typeof r.token!=="string"||!r.user||!r.user.public_id)throw Error("invalid_response");S.token=r.token;S.user=r.user;if(d.get("remember")==="on")rememberLogin(r.token,r.expires_in);else forgetSavedLogin();startApp();toast("Welcome to SURA CHAT");}
    else if(form.id==="joinRoomCode"){
