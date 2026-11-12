@@ -224,7 +224,7 @@ nav button b img{display:block;margin:0 auto 2px;filter:drop-shadow(0 2px 3px #0
  const API="https://sura-chat-api-staging.soverixnet.workers.dev";
  const S={token:"",user:null,tab:"home",signup:false,rooms:[],moments:[],threads:[],scope:"all",sort:"popular",roomId:"",seatSig:"",after:0,poll:null,heartbeatTimer:null,heartbeatUnsupported:false,busy:false,peer:"",peerName:"",dm:[],voice:{meeting:null,roomId:"",role:"",busy:false,generation:0}};
  const E=id=>document.getElementById(id);
- const safe=v=>String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+ const safe=v=>String(v==null?"":v).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
  const fmt=v=>Number(v||0).toLocaleString("en-US");
  function toast(msg){let x=E("toast");x.textContent=String(msg);x.style.display="block";clearTimeout(toast.t);toast.t=setTimeout(()=>x.style.display="none",3600);}
  async function api(path,method="GET",payload){
@@ -295,12 +295,12 @@ nav button b img{display:block;margin:0 auto 2px;filter:drop-shadow(0 2px 3px #0
  const RTK_SDK_URL="https://cdn.jsdelivr.net/npm/@cloudflare/realtimekit@2.0.4/dist/browser.js";
  let rtkScriptPromise=null;
  function loadVoiceSdk(){
-   if(window.RealtimeKitClient?.init)return Promise.resolve(window.RealtimeKitClient);
+   if((window.RealtimeKitClient && window.RealtimeKitClient.init))return Promise.resolve(window.RealtimeKitClient);
    if(!rtkScriptPromise){
      rtkScriptPromise=new Promise((resolve,reject)=>{
        const script=document.createElement("script");
        script.src=RTK_SDK_URL;script.async=true;script.crossOrigin="anonymous";
-       script.onload=()=>window.RealtimeKitClient?.init?resolve(window.RealtimeKitClient):reject(Error("RealtimeKit SDK unavailable"));
+       script.onload=()=>(window.RealtimeKitClient && window.RealtimeKitClient.init)?resolve(window.RealtimeKitClient):reject(Error("RealtimeKit SDK unavailable"));
        script.onerror=()=>reject(Error("Voice SDK could not load. Check the internet."));
        document.head.appendChild(script);
      }).catch(error=>{rtkScriptPromise=null;throw error;});
@@ -337,7 +337,7 @@ nav button b img{display:block;margin:0 auto 2px;filter:drop-shadow(0 2px 3px #0
    const audio=E("suraVoiceAudio");
    if(audio)audio.meeting=undefined;
    voiceStatus("Join Voice");voiceNet("Audio off");
-   if(meeting)try{await meeting.leave();}catch(error){console.warn("RealtimeKit leave failed",error?.message);}
+   if(meeting)try{await meeting.leave();}catch(error){console.warn("RealtimeKit leave failed",(error && error.message));}
  }
  async function joinVoice(){
    const roomId=S.roomId;
@@ -385,7 +385,7 @@ nav button b img{display:block;margin:0 auto 2px;filter:drop-shadow(0 2px 3px #0
      if(!stillCurrent())return;
      const liveMeeting=meeting;
      const transports={consuming:"waiting",producing:"waiting"};
-     if(typeof liveMeeting.meta?.on==="function"){
+     if(typeof (liveMeeting.meta && liveMeeting.meta.on)==="function"){
        liveMeeting.meta.on("mediaConnectionUpdate",({transport,state})=>{
          if(transport!=="consuming"&&transport!=="producing")return;
          if(!["new","connecting","connected","disconnected","reconnecting","failed"].includes(state))return;
@@ -393,7 +393,7 @@ nav button b img{display:block;margin:0 auto 2px;filter:drop-shadow(0 2px 3px #0
          if(S.voice.meeting===liveMeeting&&S.voice.roomId===roomId)showVoiceTransports(transports);
        });
      }
-     if(typeof liveMeeting.self?.on==="function"){
+     if(typeof (liveMeeting.self && liveMeeting.self.on)==="function"){
        liveMeeting.self.on("roomLeft",({state})=>{
          if(S.voice.meeting!==liveMeeting||S.voice.roomId!==roomId)return;
          if(state==="kicked"||state==="ended"){
@@ -442,7 +442,7 @@ nav button b img{display:block;margin:0 auto 2px;filter:drop-shadow(0 2px 3px #0
   while(E("chat").childNodes.length>80)E("chat").removeChild(E("chat").firstChild);if((b.messages||[]).length)E("chat").scrollTop=E("chat").scrollHeight;
  }
  async function leave(){if(!S.roomId)return;const id=S.roomId;clearInterval(S.poll);clearInterval(S.heartbeatTimer);S.poll=null;S.heartbeatTimer=null;await stopVoice();try{await api("/api/v1/rooms/"+id+"/leave","POST",{});S.roomId="";E("room").hidden=true;E("room").classList.remove("show");go("rooms");}catch(e){toast("Exit failed: "+e.message);S.poll=setInterval(()=>syncRoom().catch(()=>{}),4000);if(!S.heartbeatUnsupported)S.heartbeatTimer=setInterval(heartbeat,25000);}}
- async function openDm(id){if(!/^\d{7}$/.test(id))return toast("Invalid member ID");const r=await api("/api/v1/messages/"+id);S.peer=id;S.peerName=r.peer?.display_name||id;S.dm=r.messages||[];S.tab="dm";nav();render();}
+ async function openDm(id){if(!/^\d{7}$/.test(id))return toast("Invalid member ID");const r=await api("/api/v1/messages/"+id);S.peer=id;S.peerName=(r.peer && r.peer.display_name)||id;S.dm=r.messages||[];S.tab="dm";nav();render();}
  document.addEventListener("click",async e=>{const el=e.target.closest("[data-act]");if(!el)return;try{const a=el.dataset.act;
   if(a==="authTab"){S.signup=el.dataset.value==="signup";authForm();}
   else if(a==="tab"){if(S.roomId)await leave();go(el.dataset.value);}

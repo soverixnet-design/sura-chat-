@@ -7,8 +7,9 @@ android {
         applicationId 'com.soverixnet.surachat'
         minSdk 26
         targetSdk 35
-        versionCode 8
-        versionName '0.5.3-secure-webview-staging'
+        testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
+        versionCode 9
+        versionName '0.5.4-webview-compat-staging'
     }
     buildTypes {
         debug {
@@ -29,4 +30,7 @@ android {
 
 dependencies {
     implementation 'androidx.webkit:webkit:1.18.0'
+    androidTestImplementation 'androidx.test:runner:1.7.0'
+    androidTestImplementation 'androidx.test:rules:1.7.0'
+    androidTestImplementation 'androidx.test.ext:junit:1.3.0'
 }
