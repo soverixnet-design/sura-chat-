@@ -1,6 +1,11 @@
 package com.soverixnet.surachat;
 
 import android.app.Activity;
+import android.Manifest;
+import android.content.pm.PackageManager;
+import android.webkit.PermissionRequest;
+import android.webkit.WebChromeClient;
+import android.os.Build;
 import android.os.Bundle;
 import android.graphics.Color;
 import android.view.Gravity;
@@ -15,10 +20,49 @@ import java.nio.charset.StandardCharsets;
 /**
  * Debug-only Royal SURA staging app.
  * HTML is bundled locally. Auth, profiles, rooms, chat and moments use SURA API.
- * No claim of native RTC voice, purchasing or verified production build.
+ * RealtimeKit Web Core is staged with mic permission gating; end-to-end audio
+ * and background operation are not yet verified. No purchasing or production.
  */
 public final class RoyalWebActivity extends Activity {
+    private static final int AUDIO_PERMISSION_CODE = 2046;
     private WebView webView;
+    private PermissionRequest pendingAudioRequest;
+
+    // Only the local, bundled design may request AUDIO_CAPTURE. Never grant
+    // camera, protected media or untrusted iframe origins.
+    private void handleWebAudioPermission(PermissionRequest request) {
+        if (webView == null || request == null) return;
+        boolean trusted = request.getOrigin() != null &&
+            "https".equals(request.getOrigin().getScheme()) &&
+            "appassets.androidplatform.net".equals(request.getOrigin().getHost());
+        String[] resources = request.getResources();
+        boolean audioOnly = resources != null && resources.length == 1 &&
+            PermissionRequest.RESOURCE_AUDIO_CAPTURE.equals(resources[0]);
+        if (!trusted || !audioOnly) {
+            request.deny();
+            return;
+        }
+        if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+            request.grant(new String[]{PermissionRequest.RESOURCE_AUDIO_CAPTURE});
+        } else {
+            if (pendingAudioRequest != null) pendingAudioRequest.deny();
+            pendingAudioRequest = request;
+            requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO}, AUDIO_PERMISSION_CODE);
+        }
+    }
+
+    @Override public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode != AUDIO_PERMISSION_CODE) return;
+        PermissionRequest pending = pendingAudioRequest;
+        pendingAudioRequest = null;
+        if (pending == null) return;
+        if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+            pending.grant(new String[]{PermissionRequest.RESOURCE_AUDIO_CAPTURE});
+        } else {
+            pending.deny();
+        }
+    }
 
     @Override public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -44,7 +88,18 @@ public final class RoyalWebActivity extends Activity {
             settings.setAllowContentAccess(false);
             settings.setJavaScriptCanOpenWindowsAutomatically(false);
             settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
+            // RealtimeKit starts playback only after a deliberate Voice button press.
+            // Remote streams may auto-play after joining an authenticated meeting.
+            settings.setMediaPlaybackRequiresUserGesture(false);
             webView.setWebViewClient(new WebViewClient());
+            webView.setWebChromeClient(new WebChromeClient() {
+                @Override public void onPermissionRequest(PermissionRequest request) {
+                    runOnUiThread(() -> handleWebAudioPermission(request));
+                }
+                @Override public void onPermissionRequestCanceled(PermissionRequest request) {
+                    if (request == pendingAudioRequest) pendingAudioRequest = null;
+                }
+            });
             setContentView(webView);
             webView.loadDataWithBaseURL(
                 "https://appassets.androidplatform.net/",
@@ -78,6 +133,10 @@ public final class RoyalWebActivity extends Activity {
     }
 
     @Override protected void onDestroy() {
+        if (pendingAudioRequest != null) {
+            pendingAudioRequest.deny();
+            pendingAudioRequest = null;
+        }
         if (webView != null) {
             webView.destroy();
             webView = null;
