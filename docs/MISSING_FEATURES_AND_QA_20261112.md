@@ -43,3 +43,18 @@ Source of truth: owner-supplied `sura-chat.html`; maintain the gold/purple Royal
 3. Before enabling wallets, gifts, admin or CP: implement corresponding server endpoints, permissions, migration plan and tests, then review Play policies and security.
 
 This document describes feature presence in source and known omissions, not a production deployment.
+
+## Additional changes verified in source — 13 Nov 2026
+- Auth tab switches increment an auth generation counter: a delayed login request cannot unexpectedly sign in after switching between Login and Sign Up.
+- Async page navigation is scoped by session and sequence; a late failed old request cannot replace a newly opened tab.
+- When a room is hidden in the background, UI polling stops but best-effort room presence heartbeats continue. On foreground, heartbeat and room sync run immediately; no claim of OS-level background audio or guaranteed JS timers after process suspension.
+- Moments authors, inbox peers, and active DM peers now open a real member profile (server-backed, with avatar/name/country/bio), and Messages offers direct user ID lookup.
+- The staging Worker bindings include `VOICE_ENABLED=true`, D1, R2 and a RealtimeKit secret. It does **not** prove successful remote audio; two-device test remains required.
+- Node contract tests are green for these changes. New Android debug source builds must be validated per commit before treating an APK as current.
+- No SURA staging Worker, D1 schema, existing user rows, coins, or Sharika resources have been changed.
+
+### Important next safety and feature gates
+- Room presence schema migration `0079` must be checked against live database and deployed deliberately before enabling presence TTL; never execute a full schema snapshot over user data.
+- Global block/report/appeal moderation remains unimplemented, a Play release blocker.
+- Signup currently requires an 8-digit numeric secret; do not misrepresent this as robust account security. Consider longer password policy and verified account recovery before public release.
+- RTC in a WebView without a native foreground audio service is not a verified solution for sustained background audio on Android.
