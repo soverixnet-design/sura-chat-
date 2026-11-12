@@ -646,7 +646,7 @@ public final class RoomActivity extends Activity {
                         checkModerationSilently();
                     }
                 });
-            } catch (Exception ignored) { toast("Invalid request"); }
+            } catch (Exception invalidRequest) { toast("Invalid request"); }
         }));
         dialog.show();
     }
