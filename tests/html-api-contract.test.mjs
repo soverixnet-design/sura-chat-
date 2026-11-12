@@ -215,3 +215,14 @@ test('background room presence and late navigation responses stay safe', () => {
   assert.match(html, /void heartbeat\(\); \/\/ Validate membership immediately after app resumes/);
   assert.match(html, /if\(!S\.heartbeatUnsupported&&!S\.heartbeatTimer\)/);
 });
+
+test('Moments, inbox and DM show real member profiles without fictional user data', () => {
+  assert.match(html, /class="social-author" data-act="member"/);
+  assert.match(html, /avatar_key:m\.author_avatar_key/);
+  assert.match(html, /id="findMember"/);
+  assert.match(html, /pattern="\[0-9\]\{7,8\}"/);
+  assert.match(html, /class="card thread-card"/);
+  assert.match(html, /class="btn dm-member-profile"/);
+  assert.match(html, /form\.id==="findMember"\)await openMemberProfile/);
+  assert.match(html, /await api\("\/api\/v1\/users\/"\+encodeURIComponent\(id\)\)/);
+});
