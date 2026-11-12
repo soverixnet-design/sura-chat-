@@ -218,8 +218,11 @@ async function listMyReports(request, env) {
     u.public_id AS target_public_id
     FROM user_reports r JOIN users u ON u.id = r.target_user_id
     WHERE r.reporter_user_id = ? ORDER BY r.created_at_ms DESC LIMIT 40`).bind(me.id).all();
-  return json({ reports: (results || []).map(r => ({ ...r,
-    target_public_id: r.target_public_id.replace(/^SC(?=\d+$)/, '') })) });
+  return json({ reports: (results || []).map(r => ({
+    id: r.id, reason: r.reason, context_type: r.context_type,
+    status: r.status, created_at_ms: r.created_at_ms,
+    target_public_id: r.target_public_id.replace(/^SC(?=\d+$)/, '')
+  })) });
 }
 async function listReviewQueue(request, env, url) {
   await requireReportModerator(request, env);
