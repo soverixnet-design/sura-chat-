@@ -262,13 +262,14 @@ async function updateMyProfile(request, env) {
   const data = await readJson(request);
   const displayName = String(data.display_name ?? '').trim();
   const bio = String(data.bio ?? '').trim();
-  if (displayName.length < 2 || displayName.length > 40 || bio.length > 160 || /[\x00-\x08\x0B\x0C\x0E-\x1F]/.test(displayName + bio)) {
+  const countryCode = data.country_code === undefined ? user.country_code : String(data.country_code ?? '').trim().toUpperCase();
+  if ((countryCode && !/^[A-Z]{2}$/.test(countryCode)) || displayName.length < 2 || displayName.length > 40 || bio.length > 160 || /[\x00-\x08\x0B\x0C\x0E-\x1F]/.test(displayName + bio)) {
     throw new HttpError(400, 'invalid_profile');
   }
-  await env.DB.prepare('UPDATE users SET display_name = ?, bio = ? WHERE id = ?')
-    .bind(displayName, bio, user.id).run();
+  await env.DB.prepare('UPDATE users SET display_name = ?, bio = ?, country_code = ? WHERE id = ?')
+    .bind(displayName, bio, countryCode || null, user.id).run();
   return json({ user: { public_id: user.public_id.replace(/^SC(?=\d+$)/, ''), display_name: displayName,
-    country_code: user.country_code, bio, avatar_key: user.avatar_key } });
+    country_code: countryCode || null, bio, avatar_key: user.avatar_key } });
 }
 
 async function readImage(request) {
@@ -720,13 +721,14 @@ async function listRooms(request, env, url) {
   const scope = url.searchParams.get('scope') || 'all';
   const country = url.searchParams.get('country')?.toUpperCase() || '';
   const homeCountry = url.searchParams.get('home_country')?.toUpperCase() || '';
+  const search = String(url.searchParams.get('q') || '').trim();
   const sort = url.searchParams.get('sort') === 'popular' ? 'popular' : 'new';
   // Conditional SQL keeps the older database usable until migration is applied.
   const presencePredicate = presenceTrackingEnabled(env)
     ? ' AND m.last_seen_at_ms >= ' + Math.floor(Date.now() - PRESENCE_TTL_MS)
     : '';
   if (!['all', 'mine', 'history'].includes(scope) ||
-    (country && !/^[A-Z]{2}$/.test(country)) || (homeCountry && !/^[A-Z]{2}$/.test(homeCountry))) {
+    (country && !/^[A-Z]{2}$/.test(country)) || (homeCountry && !/^[A-Z]{2}$/.test(homeCountry)) || search.length > 64) {
     throw new HttpError(400, 'invalid_room_filter');
   }
   const user = scope === 'all' ? null : await currentUser(request, env);
@@ -735,9 +737,10 @@ async function listRooms(request, env, url) {
     FROM rooms r ${user ? 'JOIN room_memberships mine ON mine.room_id = r.id AND mine.user_id = ?' : ''}
     WHERE r.status != 'closed' ${user ? (scope === 'history' ? 'AND mine.left_at IS NOT NULL' : 'AND mine.left_at IS NULL') : ''}
     AND (? = '' OR r.country_code = ?)
+    AND (? = '' OR instr(lower(r.name), lower(?)) > 0)
     ORDER BY CASE WHEN r.country_code = ? THEN 0 ELSE 1 END,
       ${sort === 'popular' ? 'active_count DESC,' : ''} r.created_at DESC LIMIT ?`)
-    .bind(...(user ? [user.id] : []), country, country, homeCountry, limit).all();
+    .bind(...(user ? [user.id] : []), country, country, search, search, homeCountry, limit).all();
   return json({ rooms: rows.results ?? [], count: rows.results?.length ?? 0 });
 }
 
