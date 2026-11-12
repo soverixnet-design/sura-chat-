@@ -1,0 +1,36 @@
+name: Publish SURA CHAT v0.5.4 staging APK direct download
+on:
+  push:
+    branches:
+      - feature/sura-direct-apk-download-20261112
+    paths:
+      - '.github/workflows/sura-staging-apk-download.yml'
+  workflow_dispatch:
+permissions:
+  contents: write
+  actions: read
+jobs:
+  upload-staging-debug-apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Download verified SURA v0.5.4 APK from successful Android build
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p out
+          gh run download 43246892970 --repo "$GITHUB_REPOSITORY" --name sura-chat-debug-unverified --dir out
+          test -f out/app-debug.apk
+          cp out/app-debug.apk out/SURA_CHAT_Royal_3D_v0.5.4_Login_Fix_Staging.apk
+          printf '%s  %s\n' '54c0b31064f9b3d28faff02334dca3c7775a129e153414d217d44420d1da459b' 'out/SURA_CHAT_Royal_3D_v0.5.4_Login_Fix_Staging.apk' | sha256sum --check
+          ls -lh out/SURA_CHAT_Royal_3D_v0.5.4_Login_Fix_Staging.apk
+      - name: Create public GitHub pre-release with direct APK
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create sura-chat-v0.5.4-staging             'out/SURA_CHAT_Royal_3D_v0.5.4_Login_Fix_Staging.apk#SURA CHAT Royal 3D Android staging debug APK'             --repo "$GITHUB_REPOSITORY"             --target '6cba3903dddbc364d36499efa82c613d3ced7906'             --title 'SURA CHAT 0.5.4 — Staging APK (Android login fix)'             --notes 'Android DEBUG test build only. Not a Play Store or production release. Tested Android 10 WebView login startup in emulator: PASS. RealtimeKit two-device live voice, background audio and payment flows still require QA. Install only for staging testing.'             --prerelease
+      - name: Verify public release asset listing
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view sura-chat-v0.5.4-staging --repo "$GITHUB_REPOSITORY" --json tagName,isPrerelease,assets,url
