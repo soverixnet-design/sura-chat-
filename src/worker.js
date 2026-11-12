@@ -434,8 +434,9 @@ async function roomHeartbeat(request, env, roomId) {
   const { user } = await activeChatMembership(request, env, roomId);
   await rateLimit(request, env, 'room-presence', user.id);
   if (!presenceTrackingEnabled(env)) return json({ active: true, tracking: false });
-  const touched = await env.DB.prepare('UPDATE room_memberships SET last_seen_at_ms = ? WHERE room_id = ? AND user_id = ? AND left_at IS NULL')
-    .bind(Date.now(), roomId, user.id).run();
+  const now = Date.now();
+  const touched = await env.DB.prepare('UPDATE room_memberships SET last_seen_at_ms = ? WHERE room_id = ? AND user_id = ? AND left_at IS NULL AND last_seen_at_ms >= ?')
+    .bind(now, roomId, user.id, now - PRESENCE_TTL_MS).run();
   if (touched.meta?.changes !== 1) throw new HttpError(403, 'join_room_first');
   await pruneRoomPresence(env, roomId);
   return json({ active: true, tracking: true, heartbeat_interval_seconds: 25, ttl_seconds: 180 });
@@ -521,6 +522,12 @@ async function roomAction(request, env, roomId, action, seatNumber = null) {
     return json({ success: true, seat: null });
   }
   if (action === 'sit') {
+    // An expired membership must rejoin before it can acquire a seat.
+    if (presenceTrackingEnabled(env)) {
+      const recent = await env.DB.prepare('SELECT 1 AS active FROM room_memberships WHERE room_id = ? AND user_id = ? AND left_at IS NULL AND last_seen_at_ms >= ?')
+        .bind(roomId, user.id, Date.now() - PRESENCE_TTL_MS).first();
+      if (!recent) throw new HttpError(403, 'join_room_first');
+    }
     if (!Number.isInteger(seatNumber) || seatNumber < 1 || seatNumber > room.seat_count) throw new HttpError(400, 'invalid_seat');
     const alreadySeated = await env.DB.prepare('SELECT seat_number FROM room_seats WHERE room_id = ? AND user_id = ?').bind(roomId, user.id).first();
     if (alreadySeated) throw new HttpError(409, 'stand_before_changing_seat');
@@ -538,9 +545,12 @@ async function roomAction(request, env, roomId, action, seatNumber = null) {
 
 async function activeChatMembership(request, env, roomId) {
   const user = await currentUser(request, env);
+  const freshness = presenceTrackingEnabled(env)
+    ? ' AND m.last_seen_at_ms >= ' + Math.floor(Date.now() - PRESENCE_TTL_MS)
+    : '';
   const membership = await env.DB.prepare(`SELECT m.chat_since_id FROM room_memberships m
     JOIN rooms r ON r.id = m.room_id
-    WHERE m.room_id = ? AND m.user_id = ? AND m.left_at IS NULL AND r.status != 'closed'
+    WHERE m.room_id = ? AND m.user_id = ? AND m.left_at IS NULL AND r.status != 'closed' ${freshness}
     AND NOT EXISTS (SELECT 1 FROM room_bans b WHERE b.room_id = ? AND b.user_id = ?)`)
     .bind(roomId, user.id, roomId, user.id).first();
   if (!membership) throw new HttpError(403, 'join_room_first');
