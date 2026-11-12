@@ -8,8 +8,8 @@ android {
         minSdk 26
         targetSdk 35
         testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
-        versionCode 16
-        versionName '0.5.11-voice-reconnect-staging'
+        versionCode 17
+        versionName '0.5.12-royal-home-staging'
     }
     buildTypes {
         debug {
