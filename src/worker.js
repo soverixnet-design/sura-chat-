@@ -1228,7 +1228,8 @@ export default {
           FROM room_seats AS s LEFT JOIN users AS u ON u.id = s.user_id
           WHERE s.room_id = ? AND s.seat_number <= ? ORDER BY s.seat_number`)
           .bind(room.id, room.seat_count).all();
-        return json({ room: { id: room.id, name: room.name, seat_count: room.seat_count, status: room.status, announcement: room.announcement }, seats: results ?? [] });
+        return json({ room: { id: room.id, name: room.name, seat_count: room.seat_count, status: room.status, announcement: room.announcement },
+          seats: (results ?? []).map(seat => ({ ...seat, public_id: seat.public_id?.replace(/^SC(?=\d+$)/, '') ?? null })) });
       }
 
       const roomChatMatch = /^\/api\/v1\/rooms\/([0-9a-f-]{36})\/messages$/i.exec(path);
