@@ -107,6 +107,10 @@ jobs:
           assert status == 401 and data.get('error') == 'login_required', (status, data)
           print('OK protected profile rejects anonymous access')
 
+          status, data = check('/api/v1/me/wallets')
+          assert status == 401 and data.get('error') == 'login_required', (status, data)
+          print('OK private virtual wallet ledger rejects anonymous access')
+
           room_id = '00000000-0000-4000-8000-000000000001'
           status, data = check('/api/v1/rooms/' + room_id + '/heartbeat', method='POST')
           assert status == 401 and data.get('error') == 'login_required', (status, data)
