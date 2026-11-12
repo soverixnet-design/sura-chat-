@@ -144,6 +144,16 @@ async function readMyWallets(request, env) {
   });
 }
 
+// Genuine social counts use the dedicated SURA follows table (never demo users).
+async function followCounts(env, userId) {
+  const row = await env.DB.prepare(`SELECT
+    (SELECT COUNT(*) FROM user_follows WHERE followed_user_id = ?) AS followers_count,
+    (SELECT COUNT(*) FROM user_follows WHERE follower_user_id = ?) AS following_count`)
+    .bind(userId, userId).first();
+  const safeCount = value => Number.isSafeInteger(Number(value)) && Number(value) >= 0 ? Number(value) : null;
+  return { followers_count: safeCount(row?.followers_count), following_count: safeCount(row?.following_count) };
+}
+
 // Public profiles expose no email, session, wallet or private moderation data.
 async function memberProfile(request, env, publicId) {
   const me = await currentUser(request, env);
@@ -154,8 +164,9 @@ async function memberProfile(request, env, publicId) {
   const following = user.id !== me.id && !blockedByMe && Boolean(await env.DB.prepare(
     'SELECT 1 FROM user_follows WHERE follower_user_id = ? AND followed_user_id = ?'
   ).bind(me.id, user.id).first());
+  const counts = await followCounts(env, user.id);
   const { id: _internalUserId, ...publicInfo } = user;
-  return json({ user: { ...publicInfo, public_id: user.public_id.replace(/^SC(?=\d+$)/, ''),
+  return json({ user: { ...publicInfo, ...counts, public_id: user.public_id.replace(/^SC(?=\d+$)/, ''),
     blocked_by_me: blockedByMe, is_following: following } });
 }
 
@@ -1187,8 +1198,9 @@ export default {
       if (path === '/api/v1/me/wallets') return await readMyWallets(request, env);
       if (path === '/api/v1/me') {
         const user = await currentUser(request, env);
+        const counts = await followCounts(env, user.id);
         return json({ user: { public_id: user.public_id.replace(/^SC(?=\d+$)/, ''), display_name: user.display_name,
-          country_code: user.country_code, email: user.email_normalized, bio: user.bio, avatar_key: user.avatar_key } });
+          country_code: user.country_code, email: user.email_normalized, bio: user.bio, avatar_key: user.avatar_key, ...counts } });
       }
 
       const memberProfileMatch = /^\/api\/v1\/users\/([0-9]{7,8})$/i.exec(path);
