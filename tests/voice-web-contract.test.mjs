@@ -98,3 +98,11 @@ test('Royal room contains owner/admin management backed by protected SURA endpoi
  assert.match(html,/data-act="roomAdminToggle"/);
  assert.match(html,/protectedUser=isSelf\|\|m.permission==="owner"/);
 });
+
+
+test('voice connection busy is owned by a room generation, not a stale network request',()=>{
+ assert.match(html,/busyGeneration:-1,generation:0/);
+ assert.match(html,/S\.voice\.busy=false;S\.voice\.busyGeneration=-1/);
+ assert.match(html,/S\.voice\.busyGeneration=currentGeneration/);
+ assert.match(html,/if\(S\.voice\.busyGeneration===currentGeneration\)\{S\.voice\.busy=false;S\.voice\.busyGeneration=-1;\}/);
+});
