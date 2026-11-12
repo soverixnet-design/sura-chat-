@@ -58,3 +58,28 @@ This document describes feature presence in source and known omissions, not a pr
 - Global block/report/appeal moderation remains unimplemented, a Play release blocker.
 - Signup currently requires an 8-digit numeric secret; do not misrepresent this as robust account security. Consider longer password policy and verified account recovery before public release.
 - RTC in a WebView without a native foreground audio service is not a verified solution for sustained background audio on Android.
+
+
+## Implementation update — 13 November 2026 (staging only)
+The owner-supplied Royal/Purple/Gold 3D mobile design is retained and synchronized byte-for-byte between Android and web.
+
+### Completed in source and deployed on dedicated SURA staging Worker
+- Block/unblock API: `GET/POST /api/v1/me/blocks`, storing private user relationships and filtering two-way private DMs, inbox, public Moments and text messages.
+- Member reporting: `POST /api/v1/reports` validates context/reason, stores an operator-review record with ID, enforces per-user rate limits and a 15-minute repeated-target cooldown. Reporting UI is accessible from member profiles. **No staff review panel or appeal workflow yet**.
+- Private conversations support seven- and eight-digit public IDs (legacy `SC` aliases handled server-side).
+- Room-name search is now case-insensitive and server-side using a bound D1 query; the app fetches matches with an input debounce and country/sort/scope filters.
+- User can edit manual 2-letter country code on their profile, stored in SURA D1. No GPS collected.
+- The latest isolated SURA staging D1 database received additive migration `0080_sura_member_safety.sql`; two original user records and one room were unchanged during checks.
+- Worker staging code published as version `83a0e376-2fd5-46b0-bca0-7fe6e1eef33d` with all eight existing bindings inherited, including the protected RealtimeKit secret; prior known deployable version `8890033f-fafd-41c3-9ecd-f1ff10babbd2`.
+- Full API tests passed https://github.com/soverixnet-design/sura-chat-/actions/runs/43306438212.
+- Live anonymous HTTP smoke passed https://github.com/soverixnet-design/sura-chat-/actions/runs/43307018645.
+- Android Debug CI passed https://github.com/soverixnet-design/sura-chat-/actions/runs/43307027823.
+- Do not deploy the SQL schema snapshot. Production and Sharika resources were untouched.
+
+### Still missing: do not claim a complete published app
+- Real two-physical-device audible RTC test, uninterrupted Android background audio, reconnect QA.
+- Google login, password recovery / upgraded credentials, user privacy policy and Play review.
+- Moderation staff dashboard, report review/appeal and enforcement lifecycle.
+- Secure gifts/purchases/virtual ledgers, Play Billing, VIP/frames/entries, CP and Friendship.
+- Rankings, events, daily tasks, coin-only games, BD/Agency/Host roles and comprehensive admin panel.
+- Production signing, production API review, signed AAB and Play Store public rollout.
