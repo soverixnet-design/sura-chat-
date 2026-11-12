@@ -169,3 +169,9 @@ test('reference room has six real or explicitly disabled actions, not fake gifts
  assert.doesNotMatch(html,/var U=\[\['Luna'/);
  assert.doesNotMatch(html,/function play\(\)/);
 });
+
+test('all embedded user reference icons resolve, including announcement megaphone',()=>{
+ assert.doesNotMatch(html,/src="undefined"/);
+ assert.match(html,/class="ref-ann-icon"/);
+ assert.match(html,/versionCode 18|Royal mobile design/);
+});
