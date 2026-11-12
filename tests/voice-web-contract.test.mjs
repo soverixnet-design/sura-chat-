@@ -28,3 +28,15 @@ test('microphone permission is restricted to trusted bundled origin and audio ca
   assert.match(android, /onRequestPermissionsResult/);
   assert.match(android, /BuildConfig\.DEBUG/);
 });
+
+test('remote audio renderer is registered, mounted and cleaned up on room leave',()=>{
+  assert.match(html, /<rtk-participants-audio id="suraVoiceAudio"/);
+  assert.match(html, /realtimekit-ui@2\.0\.3\/loader\/index\.es2017\.js/);
+  assert.match(html, /module\.defineCustomElements\(\)/);
+  assert.match(html, /customElements\.whenDefined\("rtk-participants-audio"\)/);
+  assert.match(html, /audio\.meeting=meeting/);
+  assert.match(html, /audio\.meeting=undefined/);
+  assert.match(html, /await Promise\.all\(\[loadVoiceSdk\(\),loadVoiceUi\(\)\]\)/);
+  assert.match(html, /S\.voice\.generation\+\+/);
+  assert.match(html, /stillCurrent\(\)/);
+});

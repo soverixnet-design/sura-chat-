@@ -1,0 +1,30 @@
+name: SURA RealtimeKit pinned CDN script check
+on:
+  push:
+    branches: [feature/sura-voice-playback-reliability-20261112]
+    paths:
+      - .github/workflows/rtk-cdn-smoke.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  rtk-cdn:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check pinned JS and Web Components loader CDN resources
+        run: |
+          python3 - <<'PY'
+          from urllib.request import Request,urlopen
+          urls=[
+            'https://cdn.jsdelivr.net/npm/@cloudflare/realtimekit@2.0.4/dist/browser.js',
+            'https://cdn.jsdelivr.net/npm/@cloudflare/realtimekit-ui@2.0.3/loader/index.es2017.js'
+          ]
+          for url in urls:
+            with urlopen(Request(url,method='GET',headers={'User-Agent':'SURA-staging-voice-CDN-QA'}),timeout=20) as response:
+              prefix=response.read(500)
+              assert response.status==200 and len(prefix)>0,(url,response.status)
+              content_type=response.headers.get('Content-Type','')
+              assert 'javascript' in content_type, (url,content_type)
+              print('PASS pinned CDN resource',url.rsplit('/',1)[-1],len(prefix),content_type)
+          PY
