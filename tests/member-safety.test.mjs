@@ -67,7 +67,9 @@ test('authenticated users can block and unblock real members',async()=>{
   assert.deepEqual(actions[0].params.slice(0,2),['me','peer']);
   const removed=await call(env,'POST','/api/v1/me/blocks',{public_id:'12345678',blocked:false});
   assert.equal(removed.status,200);
-  assert.match(actions[1].sql,/DELETE FROM user_blocks/);
+  assert.match(actions[1].sql,/DELETE FROM user_follows/);
+  assert.deepEqual(actions[1].params,['me','peer','peer','me']);
+  assert.match(actions[2].sql,/DELETE FROM user_blocks/);
   const mine=await call(env,'GET','/api/v1/me/blocks');
   assert.equal(mine.status,200);
   assert.equal(mine.json.blocked_users[0].public_id,'12345678');
