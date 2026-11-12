@@ -68,3 +68,12 @@ test('WebView uses bundled first-party HTTPS asset loader for WebRTC',()=>{
   assert.match(android, /!APP_URL\.equals/);
   assert.match(android, /onRenderProcessGone/);
 });
+
+test('entry JavaScript avoids ES2020 nullish coalescing / optional chaining on older WebViews',()=>{
+  const scripts=html.match(/<script>([\\s\\S]*?)<\\/script>/g)||[];
+  assert.ok(scripts.length>0);
+  for(const block of scripts){
+    assert.ok(!block.includes('?'+'.'),'optional chaining breaks older Android WebView');
+    assert.ok(!block.includes('?'+'?'),'nullish coalescing breaks older Android WebView');
+  }
+});
