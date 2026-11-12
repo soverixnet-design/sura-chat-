@@ -1,0 +1,37 @@
+name: Publish SURA v0.5.6 Room Stability Test APK
+on:
+  push:
+    branches: [feature/sura-room-stability-staging-20261112]
+    paths: ['.github/workflows/sura-room-apk-release.yml']
+permissions:
+  contents: write
+  actions: read
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Require successful source checks and Android APK build
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          test "$(gh run view 43257688611 --repo "$GITHUB_REPOSITORY" --json conclusion --jq '.conclusion')" = success
+          test "$(gh run view 43257688529 --repo "$GITHUB_REPOSITORY" --json conclusion --jq '.conclusion')" = success
+      - name: Obtain validated build and verify exact bytes
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p out
+          gh run download 43257688529 --repo "$GITHUB_REPOSITORY" --name sura-chat-debug-unverified --dir out
+          mv out/app-debug.apk out/SURA_CHAT_Royal_3D_v0.5.6_Room_Stability_Staging.apk
+          printf '%s  %s\n' '6b34db2235f5f779dc46daeea09920d2170240f00c9eb3f8d9772956dee59393' 'out/SURA_CHAT_Royal_3D_v0.5.6_Room_Stability_Staging.apk' | sha256sum -c -
+      - name: Publish direct download as TEST ONLY pre-release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create sura-chat-v0.5.6-staging             'out/SURA_CHAT_Royal_3D_v0.5.6_Room_Stability_Staging.apk#SURA CHAT Royal 3D staging debug APK'             --repo "$GITHUB_REPOSITORY"             --target 'afd992f483adb2bb4d44347ccf4ce82ec2c03a85'             --title 'SURA CHAT v0.5.6 — Room stability (TEST APK)'             --notes 'TEST-ONLY Android debug APK. Fixes first room HTTP failure/retry, stable seat grid, duplicate room messages and faster room leave. APK and static API checks passed. No full real two-phone audible voice QA, no guaranteed Google sign-in, no background microphone validation, no coins/games production billing, no Play Store publication. Preserve staging user data.'             --prerelease
+      - name: Verify release asset
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view sura-chat-v0.5.6-staging --repo "$GITHUB_REPOSITORY" --json assets,tagName,isPrerelease,url
