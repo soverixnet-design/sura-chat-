@@ -276,3 +276,11 @@ test('account security is server-backed and contains no demo recovery claims', (
  assert.match(html,/Passwords do not match/);
  assert.match(html,/Email recovery is not available yet/);
 });
+
+test('wallet page shows real ledger and no pretend currency',()=>{
+ assert.ok(html.includes('/api/v1/me/wallets'));
+ assert.ok(html.includes('S.walletEntries.length'));
+ assert.ok(html.includes('data.transactions_enabled!==false'));
+ assert.ok(html.includes('No SURA wallet records for this account'));
+ assert.ok(html.includes('Buying, sending and exchanging coins are not enabled'));
+});
