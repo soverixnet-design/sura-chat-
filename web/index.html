@@ -1,0 +1,301 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1,viewport-fit=cover"><title>SURA CHAT</title><style>
+:root{--bg:#120a2a;--card:#2b1566;--card2:#3a1d85;--g1:#ffe08a;--g2:#d9a032;--tx:#fff3d6;--mut:#b9a6e6;--pk:#c06bff;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;background:#070314;color:var(--tx);font-family:'Hind Siliguri',system-ui,sans-serif;overflow:hidden}
+#app{max-width:480px;height:100%;margin:auto;background:radial-gradient(120% 60% at 50% 0,#3b1b8a 0,var(--bg) 60%);position:relative;display:flex;flex-direction:column;overflow:hidden}
+.serif{font-family:'Cormorant Garamond',serif;font-style:italic}
+header{display:flex;align-items:center;justify-content:space-between;padding:10px 14px}
+.logo{font-family:'Cormorant Garamond',serif;font-weight:700;font-size:26px;color:var(--g1);letter-spacing:1px;text-shadow:0 0 14px #d9a03266}
+.ic{width:38px;height:38px;border-radius:50%;border:1.5px solid var(--g2);display:grid;place-items:center;background:#2b156688;font-size:17px}
+main{flex:1;overflow-y:auto;padding:0 12px 16px}
+nav{display:flex;padding:8px 8px 10px;background:#1a0d3f;border-top:1px solid #d9a03255}
+nav button{flex:1;background:none;border:0;color:var(--mut);font:inherit;font-size:12px;padding:6px 0;border-radius:16px}
+nav button b{display:block;font-size:20px;font-weight:400}
+nav button.on{background:linear-gradient(#5a3314,#3a1d85);color:var(--g1);box-shadow:inset 0 0 0 1px var(--g2)}
+.card{background:linear-gradient(145deg,var(--card2),var(--card));border:1px solid #d9a03266;border-radius:18px;padding:12px;margin-bottom:12px}
+.banner{height:140px;display:flex;flex-direction:column;justify-content:center;position:relative;overflow:hidden;background:linear-gradient(120deg,#4a1f9e,#1d0c4f)}
+.banner h2{font-size:30px;color:var(--g1);line-height:1}.banner p{font-size:13px;color:var(--tx);margin:6px 0 10px}
+.banner .big{position:absolute;right:10px;top:14px;font-size:84px;filter:drop-shadow(0 0 18px #d9a032);animation:fl 3s ease-in-out infinite}
+@keyframes fl{50%{transform:translateY(-8px)}}
+.gold{background:linear-gradient(#ffe08a,#d9a032);color:#3a2205;border:0;border-radius:22px;padding:8px 18px;font:600 14px 'Hind Siliguri';box-shadow:0 2px 10px #d9a03255}
+.h{display:flex;justify-content:space-between;align-items:baseline;margin:6px 2px 8px}.h b{font-size:18px;color:var(--g1)}.h span{font-size:12px;color:var(--mut)}
+.quick{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-bottom:12px}
+.quick div{background:#2b1566;border:1px solid #d9a03266;border-radius:16px;text-align:center;padding:10px 0;font-size:11px}.quick i{display:block;font-style:normal;font-size:22px}
+.row{display:flex;gap:10px;overflow-x:auto;padding-bottom:4px}
+.av{width:46px;height:46px;border-radius:50%;display:grid;place-items:center;font-size:24px;border:2px solid var(--g2);flex:none;position:relative}
+.av.on::after{content:'';position:absolute;right:0;bottom:0;width:11px;height:11px;border-radius:50%;background:#35e07a;border:2px solid #120a2a}
+.rm{display:flex;gap:10px;align-items:center;padding:8px}
+.rm .th{width:74px;height:62px;border-radius:12px;display:grid;place-items:center;font-size:34px;flex:none}
+.rm h4{font-size:16px;color:var(--g1)}.rm small{color:var(--mut);font-size:12px}
+.live{background:#e0245e;border-radius:8px;font-size:10px;padding:1px 6px;margin-right:4px}
+.tabs{display:flex;gap:8px;overflow-x:auto;margin-bottom:12px}.tabs button{flex:none;background:#2b1566;border:1px solid #d9a03255;color:var(--tx);border-radius:16px;padding:7px 14px;font:inherit;font-size:13px}.tabs .on{background:linear-gradient(#ffe08a,#d9a032);color:#3a2205}
+.pod{display:flex;justify-content:center;align-items:flex-end;gap:14px;margin:6px 0 14px;text-align:center;font-size:13px}.pod .av{width:60px;height:60px;font-size:30px;margin:auto}.pod .f{width:78px;height:78px;font-size:38px}
+.li{display:flex;align-items:center;gap:10px;padding:8px 10px;font-size:14px}.li .n{width:22px;color:var(--g1);font-weight:600}.li .s{margin-left:auto;color:#ffb36b}
+.ev{display:flex;gap:10px;align-items:center}.ev .e{font-size:40px}.ev h4{color:var(--g1)}.ev small{color:var(--mut)}
+.msg{display:flex;gap:10px;align-items:center;padding:10px}.msg .t{margin-left:auto;text-align:right;font-size:11px;color:var(--mut)}.badge{background:var(--g2);color:#3a2205;border-radius:10px;padding:0 7px;display:inline-block;margin-top:3px}
+.stat{display:grid;grid-template-columns:repeat(4,1fr);text-align:center}.stat b{display:block;font-size:17px;color:var(--g1)}.stat small{font-size:11px;color:var(--mut)}
+.tiles{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}.tiles div{background:#2b1566;border:1px solid #d9a03255;border-radius:14px;text-align:center;padding:10px 2px;font-size:12px}.tiles i{display:block;font-style:normal;font-size:24px}
+/* room */
+#room{position:absolute;inset:0;background:radial-gradient(100% 50% at 50% 30%,#4b1fa6,#120a2a 70%);display:none;flex-direction:column;z-index:5;padding-top:env(safe-area-inset-top,0px)}#room.show{display:flex}
+.rtop{margin:8px 10px;background:linear-gradient(120deg,#4a1f9e,#241058);border:1px solid var(--g2);border-radius:18px;padding:10px 14px;display:flex;justify-content:space-between;align-items:center}.rtop h3{font-size:24px;color:var(--g1)}
+.seats{display:grid;grid-template-columns:repeat(4,1fr);gap:6px 4px;padding:10px 12px;text-align:center;font-size:11px}
+.seat{display:flex;flex-direction:column;align-items:center;gap:3px}.seat .av{width:52px;height:52px;background:#3a1d85}
+.seat .pl{width:60px;height:12px;border-radius:50%;background:linear-gradient(#7a45e0,#3a1d85);border:1px solid var(--g2)}
+.seat.sp .av{box-shadow:0 0 0 3px #c06bff,0 0 18px #c06bff;animation:pu 1s infinite}@keyframes pu{50%{box-shadow:0 0 0 6px #c06bff55,0 0 26px #c06bff}}
+.chat{flex:1;overflow-y:auto;margin:0 10px;background:#1a0d3fcc;border:1px solid #d9a03255;border-radius:16px;padding:8px 12px;font-size:13px}.chat p{margin:5px 0}.chat b{color:var(--g1)}
+.cin{display:flex;gap:6px;margin:8px 10px 0}.cin input{flex:1;background:#2b1566;border:1px solid #d9a03266;border-radius:20px;color:var(--tx);padding:9px 14px;font:inherit;font-size:14px;outline:0}
+.rbar{display:flex;gap:6px;padding:10px;align-items:center}.rbar button{flex:1;background:#2b1566;border:1px solid #d9a03288;color:var(--tx);border-radius:18px;padding:6px 0;font:inherit;font-size:11px}.rbar b{display:block;font-size:20px;font-weight:400}
+.rbar .gm{background:linear-gradient(#ffe08a,#d9a032);color:#3a2205;box-shadow:0 0 16px #ffd36a;font-weight:600;animation:gb 2s infinite}@keyframes gb{50%{transform:scale(1.07)}}
+.rbar .ex{background:#7a1630;border-color:#ff6b88}
+/* sheets */
+.sheet{position:absolute;inset:0;background:#000a;z-index:9;display:none;align-items:flex-end}.sheet.show{display:flex}
+.pan{width:100%;background:linear-gradient(#2b1566,#180b3d);border-radius:24px 24px 0 0;border-top:2px solid var(--g2);padding:16px;max-height:88%;overflow-y:auto;padding-bottom:calc(16px + env(safe-area-inset-bottom,0px))}
+.gg{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:10px}
+.gg div{background:linear-gradient(145deg,#4a2aa8,#2b1566);border:1px solid var(--g2);border-radius:18px;text-align:center;padding:14px 4px;font-size:14px}.gg i{display:block;font-style:normal;font-size:38px;margin-bottom:4px}
+.load{position:absolute;inset:0;z-index:12;background:radial-gradient(circle,#5a24c0,#0d0522);display:none;flex-direction:column;align-items:center;justify-content:center;gap:14px}.load.show{display:flex}.load i{font-style:normal;font-size:90px;animation:sp 1.4s linear infinite}@keyframes sp{to{transform:rotate(360deg)}}
+.bar{width:60%;height:8px;border-radius:6px;background:#ffffff22;overflow:hidden}.bar u{display:block;height:100%;width:0;background:linear-gradient(90deg,#ffe08a,#d9a032);transition:width 2s linear}
+.opts{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:12px 0}.opt{background:#2b1566;border:2px solid #d9a03255;border-radius:14px;text-align:center;padding:8px 0;font-size:12px}.opt i{display:block;font-style:normal;font-size:30px}.opt.pick{border-color:#ffe08a;background:#5a3aa8}.opt.win{animation:wn .5s 4;border-color:#35e07a}@keyframes wn{50%{background:#35e07a66}}
+.bets{display:flex;gap:8px;margin-bottom:10px}.bets button{flex:1;background:#2b1566;border:1px solid var(--g2);color:var(--tx);border-radius:14px;padding:8px;font:inherit}.bets .on{background:var(--g2);color:#3a2205}
+.res{min-height:26px;text-align:center;font-size:16px;color:var(--g1);margin-bottom:8px}
+#toast{position:absolute;left:50%;bottom:90px;transform:translateX(-50%);background:#000c;border:1px solid var(--g2);border-radius:20px;padding:8px 16px;font-size:13px;z-index:20;display:none}
+.fly{position:absolute;font-size:46px;z-index:15;animation:up 1.6s forwards;pointer-events:none}@keyframes up{to{transform:translateY(-220px);opacity:0}}
+@media (prefers-reduced-motion:reduce){*{animation:none!important}}
+/* ===== 3D GRAPHICS UPGRADE ===== */
+#app::before{content:'';position:absolute;inset:0;pointer-events:none;z-index:0;background:radial-gradient(2px 2px at 12% 18%,#ffe08a,transparent),radial-gradient(2px 2px at 78% 12%,#fff,transparent),radial-gradient(3px 3px at 90% 40%,#ffd36a,transparent),radial-gradient(2px 2px at 30% 62%,#d9a0ff,transparent),radial-gradient(2px 2px at 64% 82%,#ffe08a,transparent),radial-gradient(3px 3px at 8% 88%,#fff,transparent);animation:tw 4s ease-in-out infinite alternate}
+@keyframes tw{from{opacity:.3}to{opacity:1}}
+header,main,nav{position:relative;z-index:1}
+.logo{background:linear-gradient(#fff6c8 0,#ffd35a 45%,#b87310 55%,#ffe08a 100%);-webkit-background-clip:text;background-clip:text;color:transparent;text-shadow:none;filter:drop-shadow(0 2px 0 #6b3d05) drop-shadow(0 0 12px #d9a03299);font-size:28px}
+.ic{background:radial-gradient(circle at 30% 25%,#6a3bd0,#241058);box-shadow:0 4px 0 #0c0526,0 6px 14px #000a,inset 0 2px 3px #ffffff55}
+.card{background:linear-gradient(160deg,#5326b8 0,#341a82 45%,#22105a 100%);border:1px solid #ffd36a88;box-shadow:0 6px 0 #130830,0 12px 22px #000a,inset 0 1.5px 0 #ffffff44,inset 0 -10px 18px #0006;position:relative}
+.card::after{content:'';position:absolute;left:8%;right:8%;top:0;height:1px;background:linear-gradient(90deg,transparent,#fff9,transparent)}
+.banner{background:radial-gradient(circle at 85% 40%,#8a3bff 0,#4a1f9e 35%,#1d0c4f 80%)}
+.banner::before{content:'';position:absolute;right:-30px;top:-20px;width:200px;height:200px;border-radius:50%;background:conic-gradient(from 0deg,#ffd36a00,#ffd36a66,#ffd36a00,#c06bff66,#ffd36a00);animation:rot 8s linear infinite}
+@keyframes rot{to{transform:rotate(360deg)}}
+.banner .big{z-index:1;font-size:92px;filter:drop-shadow(0 3px 0 #7a4a08) drop-shadow(0 8px 0 #4a2a05) drop-shadow(0 0 22px #ffd36a);animation:fl 3s ease-in-out infinite,tilt 6s ease-in-out infinite}
+@keyframes tilt{50%{rotate:y 25deg}}
+.gold{position:relative;background:linear-gradient(#fff0a8 0,#ffd35a 40%,#d9962a 60%,#ffd870 100%);box-shadow:0 4px 0 #8a5208,0 7px 14px #0009,inset 0 2px 2px #fffc,inset 0 -3px 5px #b8731066;text-shadow:0 1px 0 #fff8;transition:transform .1s}
+.gold:active{transform:translateY(3px);box-shadow:0 1px 0 #8a5208,0 3px 8px #0009,inset 0 2px 2px #fffc}
+.quick div,.tiles div,.tabs button,.rbar button,.opt,.bets button{background:linear-gradient(#5a30c0,#2c1570);border:1px solid #ffd36a77;box-shadow:0 4px 0 #130830,0 8px 12px #0008,inset 0 1.5px 0 #ffffff44}
+.tabs .on,.bets .on{background:linear-gradient(#fff0a8,#d9962a)!important;box-shadow:0 4px 0 #8a5208,0 6px 12px #0008,inset 0 2px 2px #fffc!important}
+.quick i,.tiles i,.gg i,.opt i,.ev .e,.rm .th{filter:drop-shadow(0 3px 0 #0006) drop-shadow(0 0 8px #ffd36a77)}
+.quick div:active,.tiles div:active,.gg div:active,.rm:active{transform:translateY(3px) scale(.98)}
+.rm .th{box-shadow:inset 0 3px 6px #fff5,inset 0 -8px 14px #0007,0 4px 10px #000a;border:1px solid #ffd36a99;font-size:38px}
+.av{background-image:radial-gradient(circle at 30% 25%,#ffffff55,transparent 55%);border:3px solid transparent;background-clip:padding-box;box-shadow:0 0 0 2px #ffd36a,0 4px 0 #6b3d05,0 8px 12px #000a,inset 0 -6px 10px #0006}
+nav{background:linear-gradient(#2a1470,#12082f);box-shadow:0 -6px 18px #000a,inset 0 1.5px 0 #ffd36a99}
+nav button.on{background:linear-gradient(#8a4f14,#4a2590);box-shadow:0 4px 0 #130830,inset 0 1.5px 0 #ffd36a,0 0 16px #ffd36a55;transform:translateY(-4px)}
+nav button.on b{filter:drop-shadow(0 0 8px #ffd36a)}
+.pod{perspective:600px}.pod>div{position:relative}.pod>div::after{content:'';display:block;margin:6px auto 0;width:84px;height:34px;border-radius:8px 8px 0 0;background:linear-gradient(#d9a8ff,#5a2db0);box-shadow:0 6px 0 #130830,inset 0 2px 0 #fff8}.pod>div:nth-child(2)::after{height:56px;width:96px;background:linear-gradient(#fff0a8,#c98a1e)}
+.pod .f{box-shadow:0 0 0 3px #ffd36a,0 0 30px #ffd36a,0 5px 0 #6b3d05;animation:pu 2s infinite}
+.seat .pl{height:16px;width:64px;background:radial-gradient(ellipse at 50% 30%,#a070ff,#3a1d85 70%);box-shadow:0 5px 0 #130830,0 8px 10px #000a,inset 0 2px 2px #fff6;border-radius:50%}
+.seat .av{margin-bottom:-12px;z-index:1}
+#room{background:radial-gradient(90% 45% at 50% 28%,#7a3bff55,transparent),radial-gradient(100% 50% at 50% 30%,#4b1fa6,#120a2a 70%)}
+#room::before{content:'🎙️';position:absolute;left:50%;top:44%;transform:translate(-50%,-50%);font-size:70px;opacity:.14;filter:blur(1px);pointer-events:none}
+.rtop{background:linear-gradient(150deg,#6a2fe0,#2a1270);box-shadow:0 5px 0 #130830,0 10px 20px #000a,inset 0 2px 0 #fff4}
+.chat{background:linear-gradient(#1a0d3fee,#120a2aee);box-shadow:inset 0 4px 12px #000a}
+.rbar .gm{background:linear-gradient(#fff0a8,#d9962a);box-shadow:0 5px 0 #8a5208,0 0 22px #ffd36a,inset 0 2px 2px #fffc;transform-origin:center}
+.rbar .gm b{filter:drop-shadow(0 2px 0 #8a5208)}
+.rbar .gm::after{content:'';position:absolute;inset:-3px;border-radius:20px;border:2px solid #ffe08a;animation:ring 2s infinite;pointer-events:none}.rbar button{position:relative}
+@keyframes ring{from{transform:scale(1);opacity:.9}to{transform:scale(1.25);opacity:0}}
+.pan{background:linear-gradient(#3a1d95,#150a38);box-shadow:0 -8px 30px #000a,inset 0 2px 0 #ffd36a}
+.pan::before{content:'';display:block;width:44px;height:5px;border-radius:3px;background:#ffd36a99;margin:-6px auto 10px}
+.gg div{background:linear-gradient(160deg,#7a45e8,#3a1d95 55%,#22105a);box-shadow:0 5px 0 #130830,0 10px 16px #000a,inset 0 2px 0 #fff5;transition:transform .1s}
+.gg i{font-size:46px;animation:fl 3s ease-in-out infinite}.gg div:nth-child(2n) i{animation-delay:.6s}.gg div:nth-child(3n) i{animation-delay:1.1s}
+.load{background:radial-gradient(circle,#7a3bff,#2a0d6a 45%,#0d0522 80%)}
+.load i{font-size:110px;filter:drop-shadow(0 4px 0 #7a4a08) drop-shadow(0 10px 0 #4a2a05) drop-shadow(0 0 30px #ffd36a);animation:sp3 2s ease-in-out infinite}@keyframes sp3{50%{transform:rotateY(180deg) scale(1.15)}}
+.bar{box-shadow:inset 0 2px 4px #000a}.bar u{box-shadow:0 0 12px #ffd36a}
+.opt.pick{background:linear-gradient(#8a5aff,#4a2aa8);transform:translateY(-4px);box-shadow:0 8px 0 #130830,0 0 18px #ffd36a}
+.fly{filter:drop-shadow(0 4px 0 #7a4a08) drop-shadow(0 0 22px #ffd36a);font-size:60px}
+.stat b{text-shadow:0 2px 0 #6b3d05}
+.in{width:100%;background:#1d0e48;border:1px solid #ffd36a77;border-radius:16px;color:var(--tx);padding:12px 14px;font:inherit;font-size:15px;margin-bottom:10px;outline:0;box-shadow:inset 0 3px 8px #000a}
+#login{position:absolute;inset:0;z-index:30;display:flex;flex-direction:column;align-items:center;padding:24px 18px;overflow-y:auto;background:radial-gradient(100% 50% at 50% 0,#6a2fe0,#120a2a 65%)}
+.lbox{width:100%;margin-top:12px}#ll{width:170px;border-radius:34px;box-shadow:0 0 40px #d9a032aa,0 8px 0 #130830}
+.soc{display:flex;gap:8px;margin-top:12px}.soc button{flex:1}
+.wing{display:flex;justify-content:center;align-items:center;font-size:46px;filter:drop-shadow(0 0 10px #ffd36a)}
+.tg{background:#7a3bff;border-radius:10px;padding:1px 8px;font-size:12px;margin:0 3px}
+.lv{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:10px 0}.lv div{background:linear-gradient(#3a2a6a,#241658);border:1px solid #ffd36a66;border-radius:14px;text-align:center;padding:10px 2px;box-shadow:0 4px 0 #130830}.lv b{display:block;font-size:15px;color:var(--g1)}.lv small{font-size:11px;color:var(--mut)}
+.or{background:linear-gradient(#ff8a4a,#ff5a1f)!important;border:0!important;font-weight:600}.or2{background:linear-gradient(#ff5a1f,#d6330c)!important;border:0!important}
+.adm{display:grid;grid-template-columns:repeat(5,1fr);text-align:center;font-size:11px;margin-top:6px}.adm div{padding:6px 0}
+.dlg{width:100%;background:linear-gradient(135deg,#ff3d8f,#ff9a3d,#ffbd2e);border-radius:30px;padding:22px;text-align:center;box-shadow:0 20px 50px #000a}.dlg b{display:block;color:#fff;margin-bottom:14px}.dlg button{width:100%;background:#fff;color:#ff2d8a;border:0;border-radius:40px;padding:14px;font:600 20px 'Hind Siliguri';margin-bottom:10px}.dlg .cn{background:#ffffff44;color:#fff}
+#evside{position:absolute;right:12px;bottom:150px;z-index:3;width:80px;text-align:center;background:linear-gradient(160deg,#ff9a3d,#d6336c);border:2px solid #ffe08a;border-radius:18px;padding:6px 2px;box-shadow:0 5px 0 #6b1030,0 10px 16px #000a,0 0 16px #ffb36b;animation:fl 3s ease-in-out infinite}
+#evside i{display:block;font-style:normal;font-size:32px;filter:drop-shadow(0 2px 0 #0006)}#evside b{font-size:11px;display:block}#evside small{font-size:10px}
+/* room polish */
+.seat .pl{display:none}
+.seat .av{width:44px;height:44px;font-size:22px;margin-bottom:0;box-shadow:0 0 0 2px #ffd36a,0 4px 8px #000a}
+.seat{gap:3px;font-size:11px;text-shadow:0 1px 3px #000}
+.seats{padding:4px 10px;gap:10px 2px}
+.rtop{padding:6px 12px;margin:6px 10px;border-radius:16px}.rtop h3{font-size:19px}.rtop small{font-size:11px}
+.chat{background:transparent;border:0;box-shadow:none;padding:4px 6px}
+.chat p{width:fit-content;max-width:88%;margin:6px 0;padding:6px 14px;border-radius:16px;background:linear-gradient(#4a2aa8cc,#22105add);border:1px solid #ffd36a55;box-shadow:0 3px 0 #130830,inset 0 1px 0 #ffffff33}
+.cin{position:relative;align-items:center}
+.cin .em{position:absolute;left:14px;top:50%;transform:translateY(-50%);font-size:20px;z-index:1}
+.cin input{padding:11px 14px 11px 46px;background:linear-gradient(#3a1d85,#22105a);border:1.5px solid #ffd36a;box-shadow:inset 0 3px 8px #000a,0 0 14px #d9a03244}
+.cin .gold{width:44px;height:44px;border-radius:50%;padding:0;font-size:18px;flex:none}
+/* icons + daily */
+.ib img{display:block;margin:0 auto 2px;filter:drop-shadow(0 3px 3px #0008)}
+.rbar button{padding:4px 0}
+.rbar .gm{background:linear-gradient(#6a3bd0,#2c1570);color:var(--g1);box-shadow:0 5px 0 #130830,0 0 22px #ffd36a,inset 0 2px 0 #ffffff44}
+.ann{display:flex;align-items:center;gap:8px;margin:0 10px 6px;padding:2px 12px;border-radius:16px;background:linear-gradient(#4a2aa8,#22105a);border:1px solid #ffd36a77;font-size:12px;box-shadow:0 3px 0 #130830}
+.dly{position:relative;background:linear-gradient(#fff3dc,#f6dfb4);border:5px solid #e8b43c;border-radius:30px;padding:46px 12px 14px;color:#4a2c08;box-shadow:0 0 0 3px #0a8f78,0 20px 50px #000b,0 0 40px #ffd36a77;max-height:86vh;overflow-y:auto}
+.dh{position:absolute;left:50%;top:10px;transform:translateX(-50%);white-space:nowrap;font-size:24px;font-weight:700;background:linear-gradient(#e8ff7a,#2fbf5a);-webkit-background-clip:text;background-clip:text;color:transparent;filter:drop-shadow(0 2px 0 #0a5a3a)}
+.dp{background:#fff0cf;border:1px solid #e8c88a;border-radius:14px;padding:12px}
+.pb{height:16px;border-radius:10px;background:#8aa38a;border:2px solid #20c9a8;position:relative;margin-right:48px;margin-bottom:6px}.pb u{display:block;height:100%;background:linear-gradient(#ffe08a,#ffb030);border-radius:8px}.pb img{position:absolute;right:-50px;top:-16px;width:44px;height:44px}
+.dg{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:8px 0}
+.dc{position:relative;background:#fff8ea;border-radius:12px;padding:24px 4px 6px;text-align:center;border:2px solid transparent;font-size:12px;font-weight:600}
+.dc .di{display:flex;flex-wrap:wrap;justify-content:center;gap:8px;font-size:28px}.dc .di small{display:block;font-size:11px}
+.dc.td{background:#bfeee0;border-color:#20c9a8}.dc.done{opacity:.55}.dc.big{grid-column:1/4;background:#fff5c0}
+.dn{position:absolute;left:0;top:0;background:#2fd4b4;color:#fff;border-radius:12px 0 12px 0;padding:0 12px;font-size:15px}
+.bgt{position:absolute;left:34px;top:0;background:linear-gradient(90deg,#ff7a30,#ffb060);color:#fff;border-radius:0 0 12px 0;padding:0 12px;font-size:12px}
+.dc em{position:absolute;right:6px;top:4px;font-style:normal;color:#0a9a7a;font-size:18px}
+.vipb{background:linear-gradient(90deg,#0a8f78,#12b896);color:#e8ff7a;border-radius:14px;padding:10px;text-align:center;font-weight:700;margin-bottom:10px;font-size:13px}
+.dx{position:absolute;right:10px;top:10px;width:30px;height:30px;border-radius:50%;border:2px solid #fff;background:#0007;color:#fff;display:grid;place-items:center}
+/* profile + wallet v2 */
+.pf{background:linear-gradient(160deg,#4a2aa8cc,#22105a);border:1px solid #ffd36a66;border-radius:24px;padding:14px;margin-bottom:12px;box-shadow:0 6px 0 #130830,inset 0 1.5px 0 #ffffff44}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px}.two>div{position:relative;border-radius:18px;padding:12px;min-height:78px;box-shadow:0 5px 0 #130830,inset 0 2px 0 #fff5;color:#fff}.two b{display:block;font-size:16px}.two small{font-size:12px;opacity:.9}.two img{position:absolute;right:8px;bottom:6px;filter:drop-shadow(0 3px 3px #0008)}
+.wl{background:linear-gradient(135deg,#ff9a3d,#ff5a1f)}.vc{background:linear-gradient(135deg,#ff5a8a,#ff9a3d)}
+.row4{display:grid;grid-template-columns:repeat(4,1fr);text-align:center;font-size:12px}.row4 img{display:block;margin:0 auto 4px;filter:drop-shadow(0 3px 3px #0008)}
+.vipbn{background:linear-gradient(90deg,#ff4d7a,#ff9a3d);border-radius:18px;padding:12px 14px;display:flex;align-items:center;gap:10px;margin-bottom:12px;box-shadow:0 5px 0 #130830;font-weight:600}
+.mli{display:flex;align-items:center;gap:12px;padding:10px 4px;border-bottom:1px solid #ffffff18;font-size:15px}.mli:last-child{border:0}.mli span{margin-left:auto;color:var(--mut);font-size:12px}
+.wh{margin:0 -12px 12px;padding:10px 12px 18px;border-radius:0 0 26px 26px;color:#fff;box-shadow:0 6px 16px #000a}
+.wt{display:flex;justify-content:space-around;font-weight:600;align-items:center}.wt span{opacity:.75;padding:4px 8px}.wt .on{opacity:1;border-bottom:3px solid #fff}
+.wc{margin:14px auto 0;background:#ffffff33;border-radius:20px;padding:14px;display:flex;justify-content:center;align-items:center;gap:10px;font-size:28px;font-weight:700;max-width:270px}
+.pm{display:flex;gap:6px;overflow-x:auto;margin:10px 0}.pm span{flex:none;padding:8px 14px;border-radius:14px;background:#2b1566;border:1px solid #ffd36a55}.pm .on{background:linear-gradient(#fff0a8,#d9962a);color:#3a2205;font-weight:600}
+.pk{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:14px}.pk div{position:relative;background:linear-gradient(#fff,#ffe9c0);color:#a8620a;border-radius:16px;text-align:center;padding:14px 4px 0;font-weight:700;overflow:hidden;box-shadow:0 4px 0 #130830}.pk b{display:block;font-size:16px}.pk em{display:block;background:#ddd;margin-top:10px;padding:6px;font-style:normal}.pk u{position:absolute;right:0;top:0;background:#ffe0a0;border-radius:0 0 0 12px;font-size:11px;padding:2px 8px;text-decoration:none}
+.big{width:100%;border:0;border-radius:30px;padding:14px;font:600 18px 'Hind Siliguri';color:#fff;background:linear-gradient(#ff7a3d,#ff4d1a);box-shadow:0 5px 0 #8a2a0a}
+.dxi{width:100%;text-align:center;background:#fff;color:#333;border:1.5px solid #ccc;border-radius:16px;padding:12px;font-size:16px;margin:8px 0;outline:0}
+.sl small{display:block;color:var(--mut)}.sl .o{color:#ffb030;font-size:22px;font-weight:700}.sl .tx{font-size:12px;color:var(--mut);margin:6px 0}
+/* v4 polish */
+main>*{animation:pg .45s both}main>*:nth-child(2){animation-delay:.06s}main>*:nth-child(3){animation-delay:.12s}main>*:nth-child(4){animation-delay:.18s}
+@keyframes pg{from{opacity:0;transform:translateY(16px)}}
+.gold{overflow:hidden}.gold::after{content:'';position:absolute;top:0;left:-60%;width:35%;height:100%;background:linear-gradient(100deg,transparent,#ffffffaa,transparent);transform:skewX(-20deg);animation:sh 3.6s infinite}@keyframes sh{to{left:150%}}
+.h b{font-family:'Cormorant Garamond',serif;font-style:italic;font-size:23px}
+nav button b img{display:block;margin:0 auto 2px;filter:drop-shadow(0 2px 3px #0008)}nav button.on b img{transform:scale(1.18);transition:transform .2s}
+.quick i img,.row4 img,.th img{filter:drop-shadow(0 3px 3px #0008)}
+.av img{display:none}
+.fr{position:relative;width:44px;height:44px}.wf{position:absolute;width:88px;max-width:none;left:-22px;top:-27px;pointer-events:none;filter:drop-shadow(0 0 6px #ffd36a)}
+.bigfx{position:absolute;left:50%;top:38%;font-size:190px;z-index:16;pointer-events:none;filter:drop-shadow(0 0 40px #ffd36a) drop-shadow(0 10px 0 #7a4a08);animation:bf 2.5s ease-in-out forwards}
+@keyframes bf{0%{transform:translate(-300%,-50%) scale(.3) rotate(-20deg);opacity:0}25%{transform:translate(-50%,-50%) scale(1.15);opacity:1}80%{transform:translate(-50%,-55%) scale(1)}100%{transform:translate(200%,-60%) scale(.6);opacity:0}}
+.gban{position:absolute;left:10px;right:10px;top:72px;z-index:17;background:linear-gradient(90deg,#ff4d7a,#ff9a3d,#ffd36a);border-radius:30px;padding:6px 14px;display:flex;align-items:center;gap:6px;font-size:13px;color:#3a1305;box-shadow:0 6px 0 #6b1030,0 0 24px #ffb36b;animation:gb2 2.6s forwards}
+@keyframes gb2{0%{transform:translateX(-120%)}12%{transform:none}88%{transform:none;opacity:1}100%{transform:translateX(120%);opacity:0}}
+.gban .av{width:30px!important;height:30px!important;box-shadow:0 0 0 2px #fff}
+.spk{position:absolute;z-index:16;font-size:26px;pointer-events:none;animation:spk 1.4s ease-out both}@keyframes spk{0%{transform:scale(0) rotate(0);opacity:0}40%{opacity:1;transform:scale(1.3) rotate(90deg)}100%{transform:scale(0) rotate(200deg);opacity:0}}
+/* v5 */
+.pk2{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
+.wf{top:-19px!important}
+
+#app{height:100dvh}button{cursor:pointer}button:disabled{opacity:.5}
+#login[hidden],#room[hidden],#header[hidden],#main[hidden],#nav[hidden]{display:none!important}
+#room .chat{min-height:100px}#toast{max-width:90%;width:max-content;text-align:center}
+.form{display:grid;gap:10px}.form label{display:grid;gap:4px;font-size:13px;color:#ffe08a}
+.form input,.form textarea,.form select{width:100%;background:#1e0c50;color:#fff;border:1px solid #d9a03299;border-radius:12px;padding:11px}
+.form textarea{height:80px}.btn{border:1px solid #e9be68;background:#3a1d85;color:#fff3d6;border-radius:12px;padding:10px}
+.muted{font-size:12px;color:#b9a6e6}.empty{text-align:center;padding:25px}
+#login{justify-content:center}.seat{background:transparent;color:white;border:0;min-width:0}
+.seat .av{margin:auto}.seat small{display:block;font-size:10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#room .rtop{gap:10px}#room .rtop h3{font-family:inherit}
+#chatForm{display:flex;gap:7px;margin:10px}#chatForm input{flex:1;min-width:0;background:#2b1566;color:white;border:1px solid #ffd36a;border-radius:18px;padding:9px}
+#chatForm button{flex:none}.hrow{display:flex;align-items:center;gap:10px}
+.card .av{flex:none}.post{white-space:pre-wrap;overflow-wrap:anywhere}
+</style></head><body>
+<div id="app">
+ <header id="header" hidden><span class="ic">✦</span><div class="logo">SURA CHAT</div><small style="color:#ffe08a">STAGING</small></header>
+ <main id="main" hidden></main><nav id="nav" hidden></nav>
+ <section id="room" hidden>
+  <div class="rtop"><div><span class="live">LIVE</span><h3 id="roomName"></h3><small id="roomInfo"></small></div><button class="gold" data-act="leave">Exit</button></div>
+  <div id="seats" class="seats"></div>
+  <div class="ann">📢 <span id="announcement"></span></div>
+  <div id="chat" class="chat" aria-live="polite"></div>
+  <form id="chatForm"><input name="message" maxlength="280" required placeholder="Message this room…"><button class="gold" type="submit">➤</button></form>
+  <div class="rbar"><button data-act="voice"><b>🎙️</b>Voice unavailable</button><button data-act="stand"><b>💺</b>Stand</button><button data-act="catalog"><b>🎁</b>Gift preview</button></div>
+ </section>
+ <section id="login"><div style="font-size:56px">👑</div><div class="logo" style="font-size:36px;margin:12px">SURA CHAT</div><p style="margin:12px" class="muted">Connect · Talk · Build Your Circle</p><div id="loginBox" class="card lbox"></div><p class="muted">Real staging server · No demo accounts</p></section>
+ <div id="toast" role="status" aria-live="polite"></div>
+</div><script>
+"use strict";
+(function(){
+ const API="https://sura-chat-api-staging.soverixnet.workers.dev";
+ const S={token:"",user:null,tab:"home",signup:false,rooms:[],moments:[],threads:[],scope:"all",sort:"popular",roomId:"",seatSig:"",after:0,poll:null,busy:false,peer:"",peerName:"",dm:[]};
+ const E=id=>document.getElementById(id);
+ const safe=v=>String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+ const fmt=v=>Number(v||0).toLocaleString("en-US");
+ function toast(msg){let x=E("toast");x.textContent=String(msg);x.style.display="block";clearTimeout(toast.t);toast.t=setTimeout(()=>x.style.display="none",3600);}
+ async function api(path,method="GET",payload){
+  const headers={Accept:"application/json"};if(S.token)headers.Authorization="Bearer "+S.token;if(payload!==undefined)headers["Content-Type"]="application/json";
+  const c=new AbortController(),timer=setTimeout(()=>c.abort(),15000);
+  try{const r=await fetch(API+path,{method,headers,body:payload===undefined?undefined:JSON.stringify(payload),signal:c.signal,cache:"no-store"});const j=await r.json().catch(()=>({error:"invalid_response"}));if(!r.ok){if(r.status===401&&S.token)showLogin();throw Error(j.error||"HTTP "+r.status);}return j;}
+  catch(e){throw Error(e.name==="AbortError"?"Connection timeout":e.message);}finally{clearTimeout(timer);}
+ }
+ function showLogin(){clearInterval(S.poll);S.poll=null;S.roomId="";S.token="";S.user=null;E("header").hidden=E("main").hidden=E("nav").hidden=true;E("room").hidden=true;E("room").classList.remove("show");E("login").hidden=false;authForm();}
+ function authForm(){
+  E("loginBox").innerHTML='<div class="tabs"><button class="'+(!S.signup?'on':'')+'" data-act="authTab" data-value="login">Login</button><button class="'+(S.signup?'on':'')+'" data-act="authTab" data-value="signup">Sign Up</button></div><form id="authForm" class="form">'+
+   (S.signup?'<label>Name<input name="display_name" minlength="2" maxlength="40" required></label>':'')+
+   '<label>Email<input type="email" name="email" required autocomplete="email"></label><label>Password '+(S.signup?'(8 digits)':'')+'<input name="password" type="password" '+(S.signup?'pattern="[0-9]{8}" maxlength="8"':'')+' required></label>'+
+   (S.signup?'<label>Country code (optional)<input name="country_code" maxlength="2" pattern="[a-zA-Z]{2}" placeholder="BD"></label>':'')+
+   '<button class="gold" type="submit">'+(S.signup?'Create Account':'Sign In')+'</button></form><p class="muted" style="margin-top:12px">Social sign-in is not configured; email/password works through SURA API.</p>';
+ }
+ function nav(){E("nav").innerHTML=[["home","🏠","Home"],["rooms","🎧","Rooms"],["moments","✦","Moments"],["messages","💬","Messages"],["profile","👤","Me"]].map(x=>'<button data-act="tab" data-value="'+x[0]+'" class="'+(S.tab===x[0]?'on':'')+'"><b>'+x[1]+'</b>'+x[2]+'</button>').join("");}
+ function roomCards(){return S.rooms.length?S.rooms.map(r=>'<button class="card rm" style="width:100%;text-align:left;color:inherit" data-act="enter" data-id="'+safe(r.id)+'"><div class="th" style="background:#4a2aa8">🎙️</div><div><span class="live">LIVE</span><h4>'+safe(r.name)+'</h4><small>'+safe(r.country_code||"Global")+' · '+fmt(r.active_count)+' active · '+fmt(r.seat_count)+' seats</small></div></button>').join(""):'<div class="card empty">No rooms on the server. Create one!</div>';}
+ async function go(tab){
+  if(!S.token)return showLogin();S.tab=tab;nav();E("main").innerHTML='<div class="card empty">Loading from server…</div>';
+  try{
+   if(tab==="home"||tab==="rooms"){
+    const p=tab==="home"?"?scope=all&sort=popular&limit=5":"?scope="+S.scope+"&sort="+S.sort+"&limit=40";
+    S.rooms=(await api("/api/v1/rooms"+p)).rooms||[];
+   }else if(tab==="moments"){S.moments=(await api("/api/v1/moments?limit=20")).moments||[];}
+   else if(tab==="messages"){S.threads=(await api("/api/v1/messages/threads")).conversations||[];}
+   else if(tab==="profile"){S.user=(await api("/api/v1/me")).user;}
+   if(S.tab!==tab)return;render();
+  }catch(e){E("main").innerHTML='<div class="card"><b>Server unavailable</b><p class="muted">'+safe(e.message)+'</p><button class="gold" data-act="tab" data-value="'+safe(tab)+'">Retry</button></div>';}
+ }
+ function render(){
+  const x=E("main"),user=S.user||{};
+  if(S.tab==="home")x.innerHTML='<div class="card banner"><h2 class="serif">Royal Voice</h2><p>Join real SURA voice rooms</p><button class="gold" data-act="tab" data-value="rooms">Explore Now</button><div class="big">👑</div></div><div class="quick"><div data-act="tab" data-value="rooms"><i>🎧</i>Rooms</div><div data-act="tab" data-value="messages"><i>💬</i>Messages</div><div data-act="tab" data-value="moments"><i>✦</i>Moments</div><div data-act="tab" data-value="events"><i>🎉</i>Events</div><div data-act="tab" data-value="profile"><i>👤</i>Me</div></div><div class="h"><b>Featured Rooms</b></div>'+roomCards();
+  else if(S.tab==="rooms")x.innerHTML='<div class="h"><b>Live Rooms</b></div><div class="tabs">'+[["Popular","all","popular"],["New","all","new"],["My","mine","new"],["History","history","new"]].map(o=>'<button class="'+(o[1]===S.scope&&o[2]===S.sort?'on':'')+'" data-act="scope" data-value="'+o[1]+'" data-sort="'+o[2]+'">'+o[0]+'</button>').join("")+'</div><form class="card form" id="createRoom"><b>Create new room</b><input name="name" placeholder="Room title" minlength="3" maxlength="64" required><select name="seat_count"><option value="8">8 seats</option><option value="4">4 seats</option><option value="12">12 seats</option><option value="16">16 seats</option></select><button class="gold" type="submit">Create Room</button></form>'+roomCards();
+  else if(S.tab==="moments")x.innerHTML='<div class="h"><b>Moments</b></div><form class="card form" id="newMoment"><textarea name="body" maxlength="500" required placeholder="Share your moment…"></textarea><button class="gold">Post Moment</button></form>'+(S.moments.length?S.moments.map(m=>'<article class="card"><b>'+safe(m.author_name)+' · ID '+safe(m.author_public_id)+'</b><p class="post">'+safe(m.body)+'</p></article>').join(""):'<div class="card empty">No moments yet.</div>');
+  else if(S.tab==="messages")x.innerHTML='<div class="h"><b>Messages</b></div><form class="card form" id="findDm"><label>Member 7-digit ID<input name="id" inputmode="numeric" pattern="[0-9]{7}" required></label><button class="gold">Open Chat</button></form>'+(S.threads.length?S.threads.map(t=>'<button class="card msg" style="width:100%;text-align:left;color:inherit" data-act="openDm" data-id="'+safe(t.public_id)+'"><div><b>'+safe(t.display_name)+'</b><br><small>'+safe(t.last_message)+'</small></div></button>').join(""):'<div class="card empty">No messages found.</div>');
+  else if(S.tab==="dm")x.innerHTML='<div class="h"><b>Chat with '+safe(S.peerName||S.peer)+'</b><button class="btn" data-act="tab" data-value="messages">Back</button></div>'+(S.dm.length?S.dm.map(m=>'<div class="card" style="margin-left:'+(m.mine?'28%':'0')+'">'+safe(m.body)+'</div>').join(""):'<div class="card empty">No messages yet.</div>')+'<form class="card form" id="sendDm"><input name="message" maxlength="500" required placeholder="Message…"><button class="gold">Send</button></form>';
+  else if(S.tab==="profile")x.innerHTML='<div class="card" style="text-align:center"><div class="av" style="margin:auto">👤</div><h3>'+safe(user.display_name)+'</h3><small>ID '+safe(user.public_id)+' · '+safe(user.country_code||"Global")+'</small><p>'+safe(user.bio||"")+'</p></div><form class="card form" id="editProfile"><label>Display Name<input name="display_name" minlength="2" maxlength="40" value="'+safe(user.display_name)+'" required></label><label>Bio<textarea name="bio" maxlength="160">'+safe(user.bio||"")+'</textarea></label><button class="gold">Save</button></form><div class="tiles"><div data-act="tab" data-value="catalog"><i>🎁</i>Gifts</div><div data-act="tab" data-value="wallet"><i>🪙</i>Wallet</div><div data-act="tab" data-value="ranking"><i>🏆</i>Ranking</div><div data-act="tab" data-value="events"><i>🎉</i>Events</div></div><button data-act="logout" class="btn" style="width:100%;margin-top:14px">Logout</button>';
+  else if(S.tab==="catalog"){x.innerHTML='<div class="h"><b>Gift Catalog</b></div><div class="card">Preview only — spending and gifts are disabled by SURA backend.</div><div id="catalogResults"></div>';api("/api/v1/gifts?limit=40").then(j=>{if(S.tab==="catalog")E("catalogResults").innerHTML=(j.gifts||[]).map(g=>'<div class="card"><b>'+safe(g.name)+'</b><p>'+fmt(g.price_coins)+' coins · '+safe(g.category)+'</p></div>').join("")||'<div class="card empty">No published gifts.</div>';}).catch(e=>toast(e.message));}
+  else x.innerHTML='<div class="h"><b>'+safe(S.tab.toUpperCase())+'</b></div><div class="card"><b>Not connected yet</b><p class="muted">No demo wallets, winnings, rankings or events are displayed. This feature requires audited server support.</p></div>';
+ }
+ function startApp(){E("login").hidden=true;E("header").hidden=E("main").hidden=E("nav").hidden=false;nav();go("home");}
+ async function enter(id){if(S.busy||S.roomId)return;if(!/^[a-f0-9-]{36}$/i.test(id))return toast("Bad room ID");S.busy=true;try{await api("/api/v1/rooms/"+id+"/join","POST",{});S.roomId=id;S.after=0;S.seatSig="";E("chat").textContent="";E("room").hidden=false;E("room").classList.add("show");await syncRoom();S.poll=setInterval(()=>syncRoom().catch(e=>toast(e.message)),4000);}catch(e){toast(e.message);}finally{S.busy=false;}}
+ async function syncRoom(){
+  const id=S.roomId;if(!id)return;
+  const [a,b]=await Promise.all([api("/api/v1/rooms/"+id+"/seats"),api("/api/v1/rooms/"+id+"/messages?after="+S.after)]);
+  if(id!==S.roomId)return;E("roomName").textContent=a.room.name;E("roomInfo").textContent=a.room.seat_count+" seats · "+a.room.status;E("announcement").textContent=a.room.announcement||"No announcement";
+  const sig=JSON.stringify(a.seats);if(sig!==S.seatSig){S.seatSig=sig;E("seats").innerHTML=(a.seats||[]).map(s=>'<button class="seat" data-act="'+(s.public_id?'member':'seat')+'" data-id="'+safe(s.public_id||"")+'" data-n="'+Number(s.seat_number)+'"><div class="av">'+(s.is_locked?'🔒':s.public_id?'👤':'＋')+'</div><small>'+safe(s.display_name||(s.is_locked?'Locked':'Open'))+'</small><small>'+Number(s.seat_number)+'</small></button>').join("");}
+  for(const m of (b.messages||[])){const p=document.createElement("p"),name=document.createElement("b");name.textContent=m.sender_name?m.sender_name+": ":"";p.appendChild(name);p.appendChild(document.createTextNode(m.body||""));E("chat").appendChild(p);S.after=Math.max(S.after,Number(m.id)||0);}
+  while(E("chat").childNodes.length>80)E("chat").removeChild(E("chat").firstChild);if((b.messages||[]).length)E("chat").scrollTop=E("chat").scrollHeight;
+ }
+ async function leave(){if(!S.roomId)return;const id=S.roomId;clearInterval(S.poll);S.poll=null;try{await api("/api/v1/rooms/"+id+"/leave","POST",{});S.roomId="";E("room").hidden=true;E("room").classList.remove("show");go("rooms");}catch(e){toast("Exit failed: "+e.message);S.poll=setInterval(()=>syncRoom().catch(()=>{}),4000);}}
+ async function openDm(id){if(!/^\d{7}$/.test(id))return toast("Invalid member ID");const r=await api("/api/v1/messages/"+id);S.peer=id;S.peerName=r.peer?.display_name||id;S.dm=r.messages||[];S.tab="dm";nav();render();}
+ document.addEventListener("click",async e=>{const el=e.target.closest("[data-act]");if(!el)return;try{const a=el.dataset.act;
+  if(a==="authTab"){S.signup=el.dataset.value==="signup";authForm();}
+  else if(a==="tab"){if(S.roomId)await leave();go(el.dataset.value);}
+  else if(a==="scope"){S.scope=el.dataset.value;S.sort=el.dataset.sort;go("rooms");}
+  else if(a==="enter")await enter(el.dataset.id);
+  else if(a==="leave")await leave();
+  else if(a==="seat"){await api("/api/v1/rooms/"+S.roomId+"/seats/"+el.dataset.n,"POST",{});await syncRoom();}
+  else if(a==="stand"){await api("/api/v1/rooms/"+S.roomId+"/stand","POST",{});await syncRoom();}
+  else if(a==="member"){const r=await api("/api/v1/users/"+el.dataset.id);if(confirm(r.user.display_name+" · ID "+el.dataset.id+"\nOpen chat?")){await leave();await openDm(el.dataset.id);}}
+  else if(a==="voice")toast("Audio is not connected. Room seats and chat use the real server.");
+  else if(a==="catalog"){if(S.roomId)await leave();go("catalog");}
+  else if(a==="openDm")await openDm(el.dataset.id);
+  else if(a==="logout"){await api("/api/v1/auth/logout","POST",{}).catch(()=>{});showLogin();}
+ }catch(err){toast(err.message);}});
+ document.addEventListener("submit",async e=>{const form=e.target;if(!form.id)return;e.preventDefault();const d=new FormData(form);const btn=form.querySelector("button[type=submit],button.gold");if(btn)btn.disabled=true;
+  try{
+   if(form.id==="authForm"){const payload={email:String(d.get("email")).trim(),password:String(d.get("password"))};if(S.signup){payload.display_name=String(d.get("display_name")).trim();payload.country_code=String(d.get("country_code")).trim().toUpperCase();}const r=await api(S.signup?"/api/v1/auth/signup":"/api/v1/auth/login","POST",payload);S.token=r.token;S.user=r.user;startApp();}
+   else if(form.id==="createRoom"){await api("/api/v1/rooms","POST",{name:String(d.get("name")).trim(),seat_count:Number(d.get("seat_count"))});toast("Room created");go("rooms");}
+   else if(form.id==="chatForm"){await api("/api/v1/rooms/"+S.roomId+"/messages","POST",{message:String(d.get("message")).trim()});form.reset();await syncRoom();}
+   else if(form.id==="newMoment"){await api("/api/v1/moments","POST",{body:String(d.get("body")).trim()});toast("Moment posted");go("moments");}
+   else if(form.id==="findDm")await openDm(String(d.get("id")));
+   else if(form.id==="sendDm"){await api("/api/v1/messages/"+S.peer,"POST",{message:String(d.get("message")).trim()});await openDm(S.peer);}
+   else if(form.id==="editProfile"){const r=await api("/api/v1/me/profile","POST",{display_name:String(d.get("display_name")).trim(),bio:String(d.get("bio")).trim()});S.user={...S.user,...r.user};toast("Saved");render();}
+  }catch(err){toast(err.message);}finally{if(btn)btn.disabled=false;}
+ });
+ window.suraBack=function(){if(S.roomId){leave();return true;}if(S.tab!=="home"){go("home");return true;}return false;};
+ document.addEventListener("visibilitychange",()=>{if(document.hidden){clearInterval(S.poll);S.poll=null;}else if(S.roomId&&!S.poll)S.poll=setInterval(()=>syncRoom().catch(()=>{}),4000);});
+ showLogin();
+})();</script></body></html>
