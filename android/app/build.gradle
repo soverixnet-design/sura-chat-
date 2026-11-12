@@ -8,8 +8,8 @@ android {
         minSdk 26
         targetSdk 35
         testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
-        versionCode 10
-        versionName '0.5.5-login-staging'
+        versionCode 11
+        versionName '0.5.6-room-stability-staging'
     }
     buildTypes {
         debug {

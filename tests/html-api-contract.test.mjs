@@ -47,3 +47,28 @@ test('SURA login displays a persistent actionable server error and proper form',
  assert.match(html, /S\.signup=false/);
  assert.match(html, /typeof r\.token!=="string"/);
 });
+
+
+test('room entry does not block on first sync and retries automatically',()=>{
+ assert.match(html, /async function enter\(id\)/);
+ assert.match(html, /S\.poll=setInterval/);
+ assert.match(html, /void syncRoom\(\)\.catch/);
+ assert.match(html, /Room loading: /);
+ assert.match(html, /roomSyncPromise:null,roomGeneration:0/);
+ assert.match(html, /if\(S\.roomSyncPromise\)return S\.roomSyncPromise/);
+ assert.match(html, /task\.then\(\(\)=>\{if\(S\.roomSyncPromise===task\)/);
+ assert.match(html, /generation!==S\.roomGeneration/);
+});
+test('room seat layout ignores timestamp churn and messages dedupe',()=>{
+ assert.match(html, /function stableSeatSignature\(seats\)/);
+ assert.match(html, /String\(s\.public_id\|\|""\)/);
+ assert.match(html, /if\(sig!==S\.seatSig\)/);
+ assert.match(html, /if\(messageId<=S\.after\)continue/);
+});
+test('room exit closes immediately, retries server exit and avoids stale same-room exit',()=>{
+ assert.match(html, /async function leave\(targetTab="rooms"\)/);
+ assert.match(html, /S\.roomId="";S\.roomGeneration\+\+/);
+ assert.match(html, /void stopVoice\(\)/);
+ assert.match(html, /if\(S\.roomId!==id&&S\.token===session\)/);
+ assert.match(html, /if\(S\.roomId\)void leave\(el\.dataset\.value\);else go/);
+});
