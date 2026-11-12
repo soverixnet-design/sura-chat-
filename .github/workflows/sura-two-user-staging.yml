@@ -1,0 +1,99 @@
+name: SURA staging two-user API and RTC token acceptance
+on:
+  push:
+    branches:
+      - feature/sura-voice-web-staging-20261112
+    paths:
+      - .github/workflows/sura-two-user-staging.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  two-user-staging:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Test signup, two users, room seats, chat and RealtimeKit tokens
+        env:
+          SURA_API_URL: https://sura-chat-api-staging.soverixnet.workers.dev
+        run: |
+          python3 - <<'PY'
+          import json, os, secrets, sys, urllib.request, urllib.error
+
+          BASE=os.environ['SURA_API_URL'].rstrip('/')
+          RUN=os.environ.get('GITHUB_RUN_ID','local')
+          qa_emails=[f'suraqa-{RUN}-a@example.invalid',f'suraqa-{RUN}-b@example.invalid']
+          tokens=[]
+          room_id=None
+
+          def api(method, path, token=None, body=None):
+              headers={'Accept':'application/json','Content-Type':'application/json','User-Agent':'sura-staging-qa'}
+              if token: headers['Authorization']='Bearer '+token
+              data=json.dumps(body).encode() if body is not None else (b'{}' if method=='POST' else None)
+              req=urllib.request.Request(BASE+path,data=data,method=method,headers=headers)
+              try:
+                  with urllib.request.urlopen(req,timeout=25) as response:
+                      return response.status,json.loads(response.read())
+              except urllib.error.HTTPError as e:
+                  return e.code,json.loads(e.read())
+
+          def expect(method,path,status=200,token=None,body=None):
+              code,result=api(method,path,token,body)
+              assert code==status, f'{method} {path}: HTTP {code} {result.get("error")}'
+              return result
+
+          try:
+              for n,email in enumerate(qa_emails):
+                  result=expect('POST','/api/v1/auth/signup',201,body={
+                    'email':email,'password':''.join(str(secrets.randbelow(10)) for _ in range(8)),
+                    'display_name':f'SURA QA {n+1}','country_code':'BD'
+                  })
+                  tokens.append(result['token'])
+                  assert len(result['user']['public_id'])==7
+                  print('PASS staging signup user',n+1)
+              a,b=tokens
+              room=expect('POST','/api/v1/rooms',201,token=a,body={
+                'name':'SURA QA Temporary Voice Room '+RUN,'seat_count':8,'country_code':'BD'
+              })
+              room_id=room['room']['id']
+              print('QA_CREATED_ROOM',room_id)
+              expect('POST',f'/api/v1/rooms/{room_id}/join',token=b,body={})
+              seats=expect('GET',f'/api/v1/rooms/{room_id}/seats',token=a)
+              assert len(seats['seats'])==8
+              assert all(x['public_id'] is None for x in seats['seats'])
+              expect('POST',f'/api/v1/rooms/{room_id}/seats/1',token=a,body={})
+              expect('POST',f'/api/v1/rooms/{room_id}/seats/2',token=b,body={})
+              seats=expect('GET',f'/api/v1/rooms/{room_id}/seats',token=b)
+              assert sum(bool(x['public_id']) for x in seats['seats'])==2
+              print('PASS two users join and take separate seats')
+              expect('POST',f'/api/v1/rooms/{room_id}/messages',201,a,{'message':'SURA API voice QA hello'})
+              messages=expect('GET',f'/api/v1/rooms/{room_id}/messages?after=0',token=b)
+              assert any(x['body']=='SURA API voice QA hello' for x in messages['messages'])
+              print('PASS room chat visible to other participant')
+              for n,token in enumerate(tokens):
+                  status=expect('GET',f'/api/v1/rooms/{room_id}/voice/status',token=token)
+                  assert status['configured']==True and status['role']=='speaker'
+                  voice=expect('POST',f'/api/v1/rooms/{room_id}/voice/token',token=token,body={})
+                  assert isinstance(voice.get('token'),str) and len(voice['token'])>40
+                  print('PASS RealtimeKit speaker token',n+1)
+              expect('POST',f'/api/v1/rooms/{room_id}/stand',token=b,body={})
+              status=expect('GET',f'/api/v1/rooms/{room_id}/voice/status',token=b)
+              assert status['role']=='listener'
+              voice=expect('POST',f'/api/v1/rooms/{room_id}/voice/token',token=b,body={})
+              assert voice['role']=='listener'
+              print('PASS listener role after standing')
+              expect('POST',f'/api/v1/rooms/{room_id}/stand',token=a,body={})
+              print('PASS seat/role transition')
+          finally:
+              for token in reversed(tokens):
+                  if room_id:
+                      try: api('POST',f'/api/v1/rooms/{room_id}/leave',token,{})
+                      except Exception as e: print('WARN cleanup leave:',type(e).__name__)
+              if room_id:
+                  try:
+                      seats=api('GET',f'/api/v1/rooms/{room_id}/seats')
+                      if seats[0]==200: print('QA_OCCUPIED_SEATS_AFTER_LEAVE',sum(bool(x['public_id']) for x in seats[1]['seats']))
+                  except Exception: pass
+              print('QA_RECORDS_FOR_MANUAL_DB_CLEANUP', ','.join(qa_emails))
+              if room_id: print('QA_ROOM_FOR_MANUAL_DB_CLEANUP',room_id)
+          PY
