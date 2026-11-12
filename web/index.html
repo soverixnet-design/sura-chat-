@@ -959,9 +959,9 @@ async function openRoomGiftPreview(){
   if(a==="authTab"){S.signup=el.dataset.value==="signup";authForm();}
   else if(a==="tab"){if(S.roomId)void leave(el.dataset.value);else go(el.dataset.value);}
   else if(a==="scope"){S.scope=el.dataset.value;S.sort=el.dataset.sort;go("rooms");}
-  else if(a==="applyCountry"){const code=String(E("roomCountry")?.value||"").trim().toUpperCase();if(code&&!/^[A-Z]{2}$/.test(code))return toast("Enter a 2-letter country code, such as BD.");S.country=code;go("rooms");}
+  else if(a==="applyCountry"){const code=String((E("roomCountry")&&E("roomCountry").value)||"").trim().toUpperCase();if(code&&!/^[A-Z]{2}$/.test(code))return toast("Enter a 2-letter country code, such as BD.");S.country=code;go("rooms");}
   else if(a==="allCountries"){S.country="";go("rooms");}
-  else if(a==="myCountry"){const code=String(S.user?.country_code||"").trim().toUpperCase();if(!/^[A-Z]{2}$/.test(code))return toast("Your account has no valid country code.");S.country=code;go("rooms");}
+  else if(a==="myCountry"){const code=String((S.user&&S.user.country_code)||"").trim().toUpperCase();if(!/^[A-Z]{2}$/.test(code))return toast("Your account has no valid country code.");S.country=code;go("rooms");}
   else if(a==="enter")await enter(el.dataset.id);
   else if(a==="leave")await leave();
   else if(a==="seat"){await api("/api/v1/rooms/"+S.roomId+"/seats/"+el.dataset.n,"POST",{});await syncRoom();if(S.voice.meeting){await stopVoice();await joinVoice();}}
