@@ -83,3 +83,12 @@ The owner-supplied Royal/Purple/Gold 3D mobile design is retained and synchroniz
 - Secure gifts/purchases/virtual ledgers, Play Billing, VIP/frames/entries, CP and Friendship.
 - Rankings, events, daily tasks, coin-only games, BD/Agency/Host roles and comprehensive admin panel.
 - Production signing, production API review, signed AAB and Play Store public rollout.
+
+## Report moderation and member safety follow-up (13 Nov 2026)
+- Added authenticated self-service `GET /api/v1/me/reports` with explicitly whitelisted private response fields, and account safety screens for My Reports and Blocked Members.
+- Added `GET /api/v1/staff/access`, private `GET /api/v1/staff/reports` and `POST /api/v1/staff/reports/:uuid/review`; staff can mark open reports as reviewing/resolved/dismissed with a bounded review note and reviewer/timestamp record.
+- **Closed by default**: reviewer permission requires `SURA_MODERATOR_IDS` to be configured on the SURA Worker with verified SURA account public IDs. This is **not configured** yet. Do not reuse or guess Sharika admin IDs; only an authenticated allowlisted SURA account can access the queue. No public admin UI or client-side staff toggle.
+- Existing staging D1 migration `0080_sura_member_safety.sql` already holds review columns; no new schema changes, payment mutations, or user-data changes were necessary.
+- Isolated SURA staging Worker version `ee4bd354-bb45-4d0a-9147-f942f5ea82ad`, deployment `87c08d45-d74d-4523-b05d-62b0f46d31fb`, deployed preserving all eight existing service bindings via strict inheritance.
+- Latest source tests pass: https://github.com/soverixnet-design/sura-chat-/actions/runs/43310493271. Latest Android debug build passes: https://github.com/soverixnet-design/sura-chat-/actions/runs/43310492717. Live staging HTTP smoke, including anonymous 401 enforcement for staff/report endpoints, passes: https://github.com/soverixnet-design/sura-chat-/actions/runs/43310474273.
+- Current feature branch includes the owner-supplied mobile design, not the rejected mock layout. Build is **staging debug**, not a signed Play Store release. There is no verified 2-device RTC audio test.
