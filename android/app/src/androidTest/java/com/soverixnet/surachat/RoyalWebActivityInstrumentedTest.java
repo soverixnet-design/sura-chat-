@@ -139,8 +139,8 @@ public final class RoyalWebActivityInstrumentedTest {
             "(function(){var login=document.getElementById('login');"+
             "return login.hidden&&!!document.querySelector('#main .banner');})()",60);
         if(!signupOk) {
-            String error = evaluate("(function(){return document.querySelector('#authIssue')?.textContent||"+
-                "document.querySelector('#toast')?.textContent||'signup timed out';})()");
+            String error = evaluate("(function(){var n=document.querySelector('#authIssue'),t=document.querySelector('#toast');"+
+                "return n&&n.textContent||t&&t.textContent||'signup timed out';})()");
             throw new AssertionError("Real staging signup did not open Royal home: "+error);
         }
         Log.i("SURA_ANDROID_AUTH", "PASS synthetic signup and Royal home rendering");
