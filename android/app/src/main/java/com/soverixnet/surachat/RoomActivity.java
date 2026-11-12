@@ -769,8 +769,9 @@ public final class RoomActivity extends Activity {
             LinearLayout profile = RoyalTheme.framed(this);
             profile.setPadding(dp(18),dp(18),dp(18),dp(16));
             LinearLayout identity = horizontal();
-            identity.addView(RoyalTheme.avatar(this,RoyalTheme.initials(name)),
-                    new LinearLayout.LayoutParams(dp(70),dp(70)));
+            FrameLayout portrait = new FrameLayout(this);
+            AvatarLoader.render(this,portrait,id,name,user.optString("avatar_key",""),70);
+            identity.addView(portrait,new LinearLayout.LayoutParams(dp(70),dp(70)));
             LinearLayout detail = vertical();
             detail.setPadding(dp(14),0,0,0);
             detail.addView(RoyalTheme.text(this,"♛ "+name,20,GOLD,true));
