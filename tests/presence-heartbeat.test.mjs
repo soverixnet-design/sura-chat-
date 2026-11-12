@@ -30,7 +30,9 @@ test('server cleanup is gated behind presence flag and migration', () => {
 
 test('HTML and optional native room poll the real authenticated heartbeat', () => {
   assert.match(web,/\/heartbeat/);
-  assert.match(web,/setInterval\(heartbeat,25000\)/);
+  assert.ok(web.includes('S.heartbeatTimer=setInterval(()=>{void heartbeat();},25000)'));
+  assert.ok(web.includes('if(document.hidden){'));
+  assert.ok(web.includes('if(!S.heartbeatUnsupported&&!S.heartbeatTimer)'));
   assert.match(android,/\/heartbeat/);
   assert.match(web,/heartbeatUnsupported=true/);
   assert.doesNotMatch(web,/coins:328500/);

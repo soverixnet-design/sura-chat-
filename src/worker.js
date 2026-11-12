@@ -112,13 +112,182 @@ async function currentUser(request, env) {
   return user;
 }
 
+// The SURA economy is not enabled for writes. Read-only ledger views must be
+// scoped to the authenticated account and must never infer a demo balance.
+async function readMyWallets(request, env) {
+  const me = await currentUser(request, env);
+  const { results: balances } = await env.DB.prepare(`SELECT w.wallet_type,
+      w.currency, COALESCE(SUM(l.amount_units), 0) AS balance_units,
+      COUNT(l.id) AS ledger_entries
+    FROM wallets w LEFT JOIN wallet_ledger l ON l.wallet_id = w.id
+    WHERE w.user_id = ?
+    GROUP BY w.id, w.wallet_type, w.currency
+    ORDER BY CASE w.wallet_type WHEN 'main' THEN 1
+      WHEN 'salary' THEN 2 WHEN 'seller' THEN 3 ELSE 4 END`).bind(me.id).all();
+  const { results: history } = await env.DB.prepare(`SELECT w.wallet_type, l.amount_units,
+      l.operation, l.created_at
+    FROM wallet_ledger l JOIN wallets w ON w.id = l.wallet_id
+    WHERE w.user_id = ?
+    ORDER BY l.created_at DESC, l.id DESC LIMIT 20`).bind(me.id).all();
+  const safeAmount = value => Number.isSafeInteger(Number(value)) ? Number(value) : null;
+  return json({
+    wallets: (balances || []).map(r => ({
+      wallet_type: r.wallet_type, currency: r.currency,
+      balance_units: safeAmount(r.balance_units),
+      ledger_entries: safeAmount(r.ledger_entries)
+    })),
+    entries: (history || []).map(r => ({
+      wallet_type: r.wallet_type, amount_units: safeAmount(r.amount_units),
+      operation: r.operation, created_at: r.created_at
+    })),
+    transactions_enabled: false
+  });
+}
+
 // Public profiles expose no email, session, wallet or private moderation data.
 async function memberProfile(request, env, publicId) {
-  await currentUser(request, env);
+  const me = await currentUser(request, env);
   const user = await findPublicUser(env, publicId,
-    'u.public_id, u.display_name, u.country_code, u.bio, u.avatar_key');
+    'u.id, u.public_id, u.display_name, u.country_code, u.bio, u.avatar_key');
   if (!user) throw new HttpError(404, 'member_not_found');
-  return json({ user: { ...user, public_id: user.public_id.replace(/^SC(?=\d+$)/, '') } });
+  const blockedByMe = user.id !== me.id && await isUserBlocked(env, me.id, user.id);
+  const { id: _internalUserId, ...publicInfo } = user;
+  return json({ user: { ...publicInfo, public_id: user.public_id.replace(/^SC(?=\d+$)/, ''), blocked_by_me: blockedByMe } });
+}
+
+// Block prevents direct messaging and hides blocked users' posts/messages.
+async function isUserBlocked(env, actorId, peerId) {
+  return Boolean(await env.DB.prepare('SELECT 1 FROM user_blocks WHERE blocker_user_id = ? AND blocked_user_id = ?')
+    .bind(actorId, peerId).first());
+}
+async function usersHaveBlockedEachOther(env, actorId, peerId) {
+  return Boolean(await env.DB.prepare(`SELECT 1 FROM user_blocks WHERE
+    (blocker_user_id = ? AND blocked_user_id = ?) OR (blocker_user_id = ? AND blocked_user_id = ?) LIMIT 1`)
+    .bind(actorId, peerId, peerId, actorId).first());
+}
+async function updateMyBlocks(request, env) {
+  const me = await currentUser(request, env);
+  await rateLimit(request, env, 'room-user-block', me.id);
+  const data = await readJson(request);
+  const id = String(data.public_id || '').trim();
+  if (!publicIdIsSupported(id) || typeof data.blocked !== 'boolean') throw new HttpError(400, 'invalid_block');
+  const target = await findPublicUser(env, id);
+  if (!target) throw new HttpError(404, 'member_not_found');
+  if (target.id === me.id) throw new HttpError(400, 'cannot_block_self');
+  if (data.blocked) {
+    await env.DB.prepare('INSERT OR IGNORE INTO user_blocks (blocker_user_id, blocked_user_id, created_at_ms) VALUES (?, ?, ?)')
+      .bind(me.id, target.id, Date.now()).run();
+  } else {
+    await env.DB.prepare('DELETE FROM user_blocks WHERE blocker_user_id = ? AND blocked_user_id = ?')
+      .bind(me.id, target.id).run();
+  }
+  return json({ success: true, public_id: id.replace(/^SC(?=\d+$)/, ''), blocked: data.blocked });
+}
+async function listMyBlocks(request, env) {
+  const me = await currentUser(request, env);
+  const { results } = await env.DB.prepare(`SELECT u.public_id, u.display_name, b.created_at_ms
+    FROM user_blocks b JOIN users u ON u.id = b.blocked_user_id
+    WHERE b.blocker_user_id = ? ORDER BY b.created_at_ms DESC LIMIT 100`).bind(me.id).all();
+  return json({ blocked_users: (results || []).map(row => ({
+    ...row, public_id: row.public_id.replace(/^SC(?=\d+$)/, '')
+  })) });
+}
+
+async function reportMember(request, env) {
+  const me = await currentUser(request, env);
+  await rateLimit(request, env, 'room-user-report', me.id);
+  const data = await readJson(request);
+  const id = String(data.public_id || '').trim();
+  const reason = String(data.reason || '').trim();
+  const details = String(data.details || '').trim();
+  const contextType = String(data.context_type || 'profile').trim();
+  const contextId = String(data.context_id || '').trim();
+  if (!publicIdIsSupported(id) ||
+      !['harassment','spam','impersonation','hate','sexual_content','violence','other'].includes(reason) ||
+      !['profile','message','moment','room'].includes(contextType) ||
+      details.length > 500 || contextId.length > 128 ||
+      /[\x00-\x08\x0B\x0C\x0E-\x1F]/.test(details + contextId))
+    throw new HttpError(400, 'invalid_report');
+  const target = await findPublicUser(env, id);
+  if (!target || target.id === me.id) throw new HttpError(400, 'invalid_report_target');
+  const recent = await env.DB.prepare(`SELECT 1 FROM user_reports
+    WHERE reporter_user_id = ? AND target_user_id = ? AND created_at_ms > ? LIMIT 1`)
+    .bind(me.id, target.id, Date.now() - 15 * 60 * 1000).first();
+  if (recent) throw new HttpError(429, 'report_cooldown');
+  const reportId = crypto.randomUUID();
+  const saved = await env.DB.prepare(`INSERT INTO user_reports
+    (id, reporter_user_id, target_user_id, reason, details, context_type, context_id, status, created_at_ms)
+    VALUES (?, ?, ?, ?, ?, ?, ?, 'open', ?)`)
+    .bind(reportId, me.id, target.id, reason, details, contextType, contextId, Date.now()).run();
+  if (saved.meta?.changes !== 1) throw new HttpError(503, 'report_not_saved');
+  return json({ submitted: true, report_id: reportId }, 201);
+}
+
+
+/**
+ * Report review is explicitly opt-in. The operator sets SURA_MODERATOR_IDS
+ * as comma-separated canonical public IDs in the dedicated SURA Worker.
+ * Never accept staff/admin privileges from a client payload or from a
+ * room-owner permission, and never fall back to a public/default ID.
+ */
+function mayReviewReports(user, env) {
+  const id = String(user.public_id || '').replace(/^SC(?=\d+$)/, '');
+  const ids = String(env.SURA_MODERATOR_IDS || '').split(',').map(v => v.trim());
+  return /^(?:[0-9]{7}|[0-9]{8})$/.test(id) && ids.includes(id);
+}
+async function requireReportModerator(request, env) {
+  const user = await currentUser(request, env);
+  if (!mayReviewReports(user, env)) throw new HttpError(403, 'moderator_required');
+  return user;
+}
+async function reportStaffAccess(request, env) {
+  const me = await currentUser(request, env);
+  return json({ moderator: mayReviewReports(me, env) });
+}
+async function listMyReports(request, env) {
+  const me = await currentUser(request, env);
+  const { results } = await env.DB.prepare(`SELECT r.id, r.reason, r.context_type, r.status, r.created_at_ms,
+    u.public_id AS target_public_id
+    FROM user_reports r JOIN users u ON u.id = r.target_user_id
+    WHERE r.reporter_user_id = ? ORDER BY r.created_at_ms DESC LIMIT 40`).bind(me.id).all();
+  return json({ reports: (results || []).map(r => ({
+    id: r.id, reason: r.reason, context_type: r.context_type,
+    status: r.status, created_at_ms: r.created_at_ms,
+    target_public_id: r.target_public_id.replace(/^SC(?=\d+$)/, '')
+  })) });
+}
+async function listReviewQueue(request, env, url) {
+  await requireReportModerator(request, env);
+  const status = url.searchParams.get('status') || 'open';
+  if (!['open','reviewing','resolved','dismissed'].includes(status))
+    throw new HttpError(400, 'invalid_report_status');
+  const { results } = await env.DB.prepare(`SELECT r.id, r.reason, r.details, r.context_type,
+    r.context_id, r.status, r.created_at_ms, r.review_note, r.reviewed_at_ms,
+    target.public_id AS target_public_id, target.display_name AS target_name,
+    reporter.public_id AS reporter_public_id, reporter.display_name AS reporter_name
+    FROM user_reports r JOIN users target ON target.id = r.target_user_id
+    JOIN users reporter ON reporter.id = r.reporter_user_id
+    WHERE r.status = ? ORDER BY r.created_at_ms DESC LIMIT 30`).bind(status).all();
+  return json({ status, reports: (results || []).map(r => ({
+    ...r, target_public_id: r.target_public_id.replace(/^SC(?=\d+$)/, ''),
+    reporter_public_id: r.reporter_public_id.replace(/^SC(?=\d+$)/, '')
+  })) });
+}
+async function reviewReport(request, env, reportId) {
+  const moderator = await requireReportModerator(request, env);
+  await rateLimit(request, env, 'room-staff-report-review', moderator.id);
+  const data = await readJson(request);
+  const status = String(data.status || '');
+  const note = String(data.note || '').trim();
+  if (!['reviewing','resolved','dismissed'].includes(status) || note.length > 500 ||
+      /[\x00-\x08\x0B\x0C\x0E-\x1F]/.test(note))
+    throw new HttpError(400, 'invalid_report_review');
+  const changed = await env.DB.prepare(`UPDATE user_reports
+    SET status = ?, review_note = ?, reviewed_by_user_id = ?, reviewed_at_ms = ?
+    WHERE id = ? AND status IN ('open','reviewing')`)
+    .bind(status, note, moderator.id, Date.now(), reportId).run();
+  if (changed.meta?.changes !== 1) throw new HttpError(409, 'report_not_open');
+  return json({ updated: true, report_id: reportId, status });
 }
 
 // Only the two authenticated participants can read their conversation.
@@ -127,6 +296,7 @@ async function directConversation(request, env, publicId, url) {
   const peer = await findPublicUser(env, publicId,
     'u.id, u.public_id, u.display_name, u.avatar_key');
   if (!peer || peer.id === me.id) throw new HttpError(404, 'conversation_not_found');
+  if (await usersHaveBlockedEachOther(env, me.id, peer.id)) throw new HttpError(403, 'conversation_blocked');
   const rawBefore = url.searchParams.get('before');
   const before = rawBefore === null ? Number.MAX_SAFE_INTEGER : Number(rawBefore);
   if (!Number.isSafeInteger(before) || before < 1) throw new HttpError(400, 'invalid_cursor');
@@ -136,7 +306,7 @@ async function directConversation(request, env, publicId, url) {
        (sender_user_id = ? AND recipient_user_id = ?))
     ORDER BY id DESC LIMIT 50`).bind(before, me.id, peer.id, peer.id, me.id).all();
   const rows = results || [];
-  return json({ peer: { public_id: peer.public_id, display_name: peer.display_name, avatar_key: peer.avatar_key },
+  return json({ peer: { public_id: peer.public_id.replace(/^SC(?=\d+$)/, ''), display_name: peer.display_name, avatar_key: peer.avatar_key },
     messages: rows.map(row => ({ id: row.id, body: row.body, created_at_ms: row.created_at_ms,
       mine: row.sender_user_id === me.id })).reverse(),
     next_before: rows.length === 50 ? rows[rows.length - 1].id : null });
@@ -153,9 +323,13 @@ async function directInbox(request, env) {
       m.created_at_ms AS last_created_at_ms, m.sender_user_id = ? AS last_sent_by_me
     FROM peers p JOIN users u ON u.id = p.peer_id
     JOIN direct_messages m ON m.id = p.latest_id
-    WHERE u.status = 'active' ORDER BY m.id DESC`)
-    .bind(me.id, me.id, me.id, me.id).all();
-  return json({ conversations: results || [] });
+    WHERE u.status = 'active' AND NOT EXISTS (
+      SELECT 1 FROM user_blocks b WHERE (b.blocker_user_id = ? AND b.blocked_user_id = u.id)
+      OR (b.blocker_user_id = u.id AND b.blocked_user_id = ?)
+    ) ORDER BY m.id DESC`)
+    .bind(me.id, me.id, me.id, me.id, me.id, me.id).all();
+  return json({ conversations: (results || []).map(row => ({ ...row,
+    public_id: row.public_id.replace(/^SC(?=\d+$)/, '') })) });
 }
 
 async function sendDirectMessage(request, env, publicId) {
@@ -165,6 +339,7 @@ async function sendDirectMessage(request, env, publicId) {
   const peer = await findPublicUser(env, publicId);
   if (!peer) throw new HttpError(404, 'member_not_found');
   if (peer.id === me.id) throw new HttpError(400, 'cannot_message_self');
+  if (await usersHaveBlockedEachOther(env, me.id, peer.id)) throw new HttpError(403, 'conversation_blocked');
   const data = await readJson(request);
   const body = String(data.message ?? '').trim();
   if (!body || body.length > 500 || /[\x00-\x08\x0B\x0C\x0E-\x1F]/.test(body))
@@ -186,13 +361,14 @@ async function updateMyProfile(request, env) {
   const data = await readJson(request);
   const displayName = String(data.display_name ?? '').trim();
   const bio = String(data.bio ?? '').trim();
-  if (displayName.length < 2 || displayName.length > 40 || bio.length > 160 || /[\x00-\x08\x0B\x0C\x0E-\x1F]/.test(displayName + bio)) {
+  const countryCode = data.country_code === undefined ? user.country_code : String(data.country_code ?? '').trim().toUpperCase();
+  if ((countryCode && !/^[A-Z]{2}$/.test(countryCode)) || displayName.length < 2 || displayName.length > 40 || bio.length > 160 || /[\x00-\x08\x0B\x0C\x0E-\x1F]/.test(displayName + bio)) {
     throw new HttpError(400, 'invalid_profile');
   }
-  await env.DB.prepare('UPDATE users SET display_name = ?, bio = ? WHERE id = ?')
-    .bind(displayName, bio, user.id).run();
+  await env.DB.prepare('UPDATE users SET display_name = ?, bio = ?, country_code = ? WHERE id = ?')
+    .bind(displayName, bio, countryCode || null, user.id).run();
   return json({ user: { public_id: user.public_id.replace(/^SC(?=\d+$)/, ''), display_name: displayName,
-    country_code: user.country_code, bio, avatar_key: user.avatar_key } });
+    country_code: countryCode || null, bio, avatar_key: user.avatar_key } });
 }
 
 async function readImage(request) {
@@ -303,6 +479,58 @@ async function login(request, env) {
   const token = await issueSession(env, credential.user_id);
   return json({ user: { public_id: credential.public_id.replace(/^SC(?=\d+$)/, ''), display_name: credential.display_name,
     country_code: credential.country_code, bio: credential.bio, avatar_key: credential.avatar_key }, token, token_type: 'Bearer', expires_in: SESSION_LIFETIME_MS / 1000 });
+}
+
+// A signed-in user can strengthen a legacy eight-digit PIN without email OTP.
+// Both operations require the current password and are per-account rate limited.
+// Existing logins and legacy sign-up PINs remain compatible during staging.
+async function verifyCurrentPassword(request, env, password, purpose) {
+  const me = await currentUser(request, env);
+  await rateLimit(request, env, purpose, me.id);
+  if (typeof password !== 'string' || !password || password.length > 128)
+    throw new HttpError(400, 'invalid_current_password');
+  const credential = await env.DB.prepare(`SELECT salt_b64, password_hash_b64, iterations
+    FROM user_credentials WHERE user_id = ?`).bind(me.id).first();
+  if (!credential) throw new HttpError(401, 'session_expired');
+  const actual = await hashPassword(password, unb64(credential.salt_b64), credential.iterations);
+  if (!equalBytes(actual, unb64(credential.password_hash_b64)))
+    throw new HttpError(401, 'invalid_current_password');
+  return { me, credential };
+}
+async function changeMyPassword(request, env) {
+  const data = await readJson(request);
+  const newPassword = data.new_password;
+  if (typeof newPassword !== 'string' || newPassword.length < 10 ||
+      newPassword.length > 64 || !/[A-Za-z]/.test(newPassword) ||
+      !/[0-9]/.test(newPassword) || /[\x00-\x1F\x7F]/.test(newPassword))
+    throw new HttpError(400, 'weak_new_password');
+  const { me, credential } = await verifyCurrentPassword(request, env, data.current_password, 'auth-password-change');
+  if (String(data.current_password) === newPassword)
+    throw new HttpError(400, 'password_unchanged');
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const passwordHash = await hashPassword(newPassword, salt);
+  // Compare-and-swap prevents an old verification from overwriting a later
+  // credential change triggered in another session.
+  const updated = await env.DB.prepare(`UPDATE user_credentials
+    SET salt_b64 = ?, password_hash_b64 = ?, iterations = ?
+    WHERE user_id = ? AND password_hash_b64 = ?`)
+    .bind(b64(salt), b64(passwordHash), PASSWORD_ITERATIONS, me.id, credential.password_hash_b64).run();
+  if (updated.meta?.changes !== 1) throw new HttpError(409, 'password_changed_elsewhere');
+  // Leave the requesting session alive; revoke other phones immediately.
+  const tokenHash = await sha256(request.headers.get('Authorization').slice(7));
+  await env.DB.prepare(`UPDATE auth_sessions SET revoked_at_ms = ?
+    WHERE user_id = ? AND token_sha256 <> ? AND revoked_at_ms IS NULL`)
+    .bind(Date.now(), me.id, tokenHash).run();
+  return json({ password_changed: true, other_sessions_revoked: true });
+}
+async function revokeOtherSessions(request, env) {
+  const data = await readJson(request);
+  const { me } = await verifyCurrentPassword(request, env, data.current_password, 'auth-session-revoke');
+  const tokenHash = await sha256(request.headers.get('Authorization').slice(7));
+  const result = await env.DB.prepare(`UPDATE auth_sessions SET revoked_at_ms = ?
+    WHERE user_id = ? AND token_sha256 <> ? AND revoked_at_ms IS NULL`)
+    .bind(Date.now(), me.id, tokenHash).run();
+  return json({ other_sessions_revoked: true, count: Number(result.meta?.changes || 0) });
 }
 
 async function createRoom(request, env) {
@@ -558,12 +786,16 @@ async function activeChatMembership(request, env, roomId) {
 }
 
 async function roomChat(request, env, roomId, after = 0) {
-  const { membership } = await activeChatMembership(request, env, roomId);
+  const { membership, user } = await activeChatMembership(request, env, roomId);
   const { results } = await env.DB.prepare(`SELECT m.id, m.kind, m.body, m.created_at_ms,
     u.public_id AS sender_public_id, u.display_name AS sender_name
     FROM room_messages m LEFT JOIN users u ON u.id = m.sender_user_id
-    WHERE m.room_id = ? AND m.id > ? AND m.id > ? ORDER BY m.id LIMIT 50`)
-    .bind(roomId, after, membership.chat_since_id).all();
+    WHERE m.room_id = ? AND m.id > ? AND m.id > ?
+    AND (m.sender_user_id IS NULL OR NOT EXISTS (SELECT 1 FROM user_blocks b WHERE
+      (b.blocker_user_id = ? AND b.blocked_user_id = m.sender_user_id) OR
+      (b.blocker_user_id = m.sender_user_id AND b.blocked_user_id = ?)))
+    ORDER BY m.id LIMIT 50`)
+    .bind(roomId, after, membership.chat_since_id, user.id, user.id).all();
   return json({ messages: (results ?? []).map(row => ({ ...row,
     sender_public_id: row.sender_public_id?.replace(/^SC(?=\d+$)/, '') ?? null })) });
 }
@@ -590,12 +822,12 @@ async function sendRoomChat(request, env, roomId) {
 // Moments are a durable, user-authored social feed. Never accept a client-supplied
 // author ID; profile names and seven-digit IDs are resolved from the user table.
 async function listMoments(request, env, url) {
-  await currentUser(request, env);
+  const me = await currentUser(request, env);
   const beforeRaw = url.searchParams.get('before');
   const before = beforeRaw === null ? Number.MAX_SAFE_INTEGER : Number(beforeRaw);
   const author = url.searchParams.get('author') || '';
   if (!Number.isSafeInteger(before) || before < 1 ||
-      (author && !/^[0-9]{7}$/.test(author))) throw new HttpError(400, 'invalid_moments_filter');
+      (author && !/^[0-9]{7,8}$/.test(author))) throw new HttpError(400, 'invalid_moments_filter');
   const limit = Math.min(pageSize(url.searchParams.get('limit')), 20);
   let authorId = null;
   if (author) {
@@ -607,7 +839,10 @@ async function listMoments(request, env, url) {
     u.public_id AS author_public_id, u.display_name AS author_name, u.avatar_key AS author_avatar_key
     FROM moments m JOIN users u ON u.id = m.author_user_id
     WHERE m.id < ? AND u.status = 'active' AND (? IS NULL OR m.author_user_id = ?)
-    ORDER BY m.id DESC LIMIT ?`).bind(before, authorId, authorId, limit).all();
+    AND NOT EXISTS (SELECT 1 FROM user_blocks b WHERE
+      (b.blocker_user_id = ? AND b.blocked_user_id = m.author_user_id) OR
+      (b.blocker_user_id = m.author_user_id AND b.blocked_user_id = ?))
+    ORDER BY m.id DESC LIMIT ?`).bind(before, authorId, authorId, me.id, me.id, limit).all();
   const posts = (results || []).map(row => ({ ...row,
     author_public_id: row.author_public_id.replace(/^SC(?=\d+$)/, '') }));
   return json({ moments: posts, next_before: posts.length === limit ? posts[posts.length - 1].id : null });
@@ -634,16 +869,21 @@ async function createMoment(request, env) {
 
 async function listRooms(request, env, url) {
   const limit = pageSize(url.searchParams.get('limit'));
+  const offsetText = url.searchParams.get('offset');
+  const offset = offsetText === null ? 0 : Number(offsetText);
+  if (offsetText !== null && (!/^(0|[1-9]\d{0,3})$/.test(offsetText) || offset > 5000))
+    throw new HttpError(400, 'invalid_room_offset');
   const scope = url.searchParams.get('scope') || 'all';
   const country = url.searchParams.get('country')?.toUpperCase() || '';
   const homeCountry = url.searchParams.get('home_country')?.toUpperCase() || '';
+  const search = String(url.searchParams.get('q') || '').trim();
   const sort = url.searchParams.get('sort') === 'popular' ? 'popular' : 'new';
   // Conditional SQL keeps the older database usable until migration is applied.
   const presencePredicate = presenceTrackingEnabled(env)
     ? ' AND m.last_seen_at_ms >= ' + Math.floor(Date.now() - PRESENCE_TTL_MS)
     : '';
   if (!['all', 'mine', 'history'].includes(scope) ||
-    (country && !/^[A-Z]{2}$/.test(country)) || (homeCountry && !/^[A-Z]{2}$/.test(homeCountry))) {
+    (country && !/^[A-Z]{2}$/.test(country)) || (homeCountry && !/^[A-Z]{2}$/.test(homeCountry)) || search.length > 64) {
     throw new HttpError(400, 'invalid_room_filter');
   }
   const user = scope === 'all' ? null : await currentUser(request, env);
@@ -652,10 +892,41 @@ async function listRooms(request, env, url) {
     FROM rooms r ${user ? 'JOIN room_memberships mine ON mine.room_id = r.id AND mine.user_id = ?' : ''}
     WHERE r.status != 'closed' ${user ? (scope === 'history' ? 'AND mine.left_at IS NOT NULL' : 'AND mine.left_at IS NULL') : ''}
     AND (? = '' OR r.country_code = ?)
+    AND (? = '' OR instr(lower(r.name), lower(?)) > 0)
     ORDER BY CASE WHEN r.country_code = ? THEN 0 ELSE 1 END,
-      ${sort === 'popular' ? 'active_count DESC,' : ''} r.created_at DESC LIMIT ?`)
-    .bind(...(user ? [user.id] : []), country, country, homeCountry, limit).all();
-  return json({ rooms: rows.results ?? [], count: rows.results?.length ?? 0 });
+      ${sort === 'popular' ? 'active_count DESC,' : ''} r.created_at DESC, r.id DESC LIMIT ? OFFSET ?`)
+    .bind(...(user ? [user.id] : []), country, country, search, search, homeCountry, limit + 1, offset).all();
+  const fetched = rows.results ?? [];
+  const hasMore = fetched.length > limit;
+  const rooms = fetched.slice(0, limit);
+  return json({ rooms, count: rooms.length, has_more: hasMore, next_offset: hasMore ? offset + limit : null });
+}
+
+/**
+ * Read-only rankings from real room join audit events, not gifts or coins.
+ * Closed rooms are excluded and repeat joins count as repeat entries.
+ */
+async function roomActivityRanking(request, env, url) {
+  const period = url.searchParams.get('period') || 'weekly';
+  const country = String(url.searchParams.get('country') || '').trim().toUpperCase();
+  const windows = { daily: '-1 day', weekly: '-7 days', monthly: '-30 days' };
+  if (!Object.prototype.hasOwnProperty.call(windows, period) ||
+      (country && !/^[A-Z]{2}$/.test(country))) throw new HttpError(400, 'invalid_rank_filter');
+  const cutoff = windows[period]; // fixed server whitelist; no SQL from input
+  const { results } = await env.DB.prepare(`SELECT r.id, r.name, r.country_code, r.seat_count,
+      COUNT(e.id) AS join_events, COUNT(DISTINCT e.actor_user_id) AS unique_visitors
+    FROM rooms r
+    LEFT JOIN room_audit_events e ON e.room_id = r.id AND e.action = 'join'
+      AND e.created_at >= datetime('now', '${cutoff}')
+    WHERE r.status != 'closed' AND (? = '' OR r.country_code = ?)
+    GROUP BY r.id
+    ORDER BY join_events DESC, unique_visitors DESC, r.created_at DESC
+    LIMIT 20`).bind(country, country).all();
+  return json({ period, metric: 'room_entries', rooms: (results || []).map(r => ({
+    id: r.id, name: r.name, country_code: r.country_code,
+    seat_count: r.seat_count, join_events: Number(r.join_events || 0),
+    unique_visitors: Number(r.unique_visitors || 0)
+  })) });
 }
 
 async function moderationContext(request, env, roomId, ownerOnly = false) {
@@ -813,8 +1084,14 @@ export default {
       if (request.method === 'POST') {
         if (path === '/api/v1/auth/signup') return await signup(request, env);
         if (path === '/api/v1/auth/login') return await login(request, env);
+        if (path === '/api/v1/auth/change-password') return await changeMyPassword(request, env);
+        if (path === '/api/v1/auth/revoke-other-sessions') return await revokeOtherSessions(request, env);
         if (path === '/api/v1/me/profile') return await updateMyProfile(request, env);
         if (path === '/api/v1/me/avatar') return await uploadMyAvatar(request, env);
+        if (path === '/api/v1/me/blocks') return await updateMyBlocks(request, env);
+        if (path === '/api/v1/reports') return await reportMember(request, env);
+        const reportReviewMatch = /^\/api\/v1\/staff\/reports\/([0-9a-f-]{36})\/review$/i.exec(path);
+        if (reportReviewMatch) return await reviewReport(request, env, reportReviewMatch[1]);
         if (path === '/api/v1/auth/logout') {
           await currentUser(request, env);
           await env.DB.prepare('UPDATE auth_sessions SET revoked_at_ms = ? WHERE token_sha256 = ?')
@@ -823,7 +1100,7 @@ export default {
         }
         if (path === '/api/v1/rooms') return await createRoom(request, env);
         if (path === '/api/v1/moments') return await createMoment(request, env);
-        const dmPostMatch = /^\/api\/v1\/messages\/([0-9]{7})$/.exec(path);
+        const dmPostMatch = /^\/api\/v1\/messages\/([0-9]{7,8})$/.exec(path);
         if (dmPostMatch) return await sendDirectMessage(request, env, dmPostMatch[1]);
         const chatPostMatch = /^\/api\/v1\/rooms\/([0-9a-f-]{36})\/messages$/i.exec(path);
         if (chatPostMatch) return await sendRoomChat(request, env, chatPostMatch[1]);
@@ -852,6 +1129,11 @@ export default {
         return json({ app: 'SURA CHAT', environment: 'staging', status: result?.ok === 1 ? 'ok' : 'degraded', database: result?.ok === 1 ? 'connected' : 'error', media: env.MEDIA ? 'bound' : 'unavailable', voice: voiceConfigured(env) ? 'realtimekit_enabled' : 'realtimekit_config_required', transactions: 'disabled' }, result?.ok === 1 ? 200 : 503);
       }
 
+      if (path === '/api/v1/me/blocks') return await listMyBlocks(request, env);
+      if (path === '/api/v1/me/reports') return await listMyReports(request, env);
+      if (path === '/api/v1/staff/access') return await reportStaffAccess(request, env);
+      if (path === '/api/v1/staff/reports') return await listReviewQueue(request, env, url);
+      if (path === '/api/v1/me/wallets') return await readMyWallets(request, env);
       if (path === '/api/v1/me') {
         const user = await currentUser(request, env);
         return json({ user: { public_id: user.public_id.replace(/^SC(?=\d+$)/, ''), display_name: user.display_name,
@@ -878,9 +1160,10 @@ export default {
       if (path === '/api/v1/rooms') {
         return await listRooms(request, env, url);
       }
+      if (path === '/api/v1/rankings/rooms') return await roomActivityRanking(request, env, url);
       if (path === '/api/v1/moments') return await listMoments(request, env, url);
       if (path === '/api/v1/messages/threads') return await directInbox(request, env);
-      const dmGetMatch = /^\/api\/v1\/messages\/([0-9]{7})$/.exec(path);
+      const dmGetMatch = /^\/api\/v1\/messages\/([0-9]{7,8})$/.exec(path);
       if (dmGetMatch) return await directConversation(request, env, dmGetMatch[1], url);
 
       const manageMatch = /^\/api\/v1\/rooms\/([0-9a-f-]{36})\/manage$/i.exec(path);

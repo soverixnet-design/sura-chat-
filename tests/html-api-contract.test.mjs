@@ -139,3 +139,148 @@ test('session persistence retains late-401 and safe room logout protections',()=
  assert.match(html,/async function leave\(targetTab="rooms"\)/);
  assert.match(html,/S\.authGeneration\+\+/);
 });
+
+
+test('user-provided SURA Royal mobile reference layout replaces assistant-created home',()=>{
+ const home=html.slice(html.indexOf('if(S.tab==="home")x.innerHTML='),html.indexOf('else if(S.tab==="rooms")'));
+ assert.match(home,/Join Live Voice Rooms/);
+ assert.match(home,/Talk · Connect · Make Friends/);
+ assert.match(home,/Featured Voice Rooms/);
+ assert.match(home,/Trending Hosts/);
+ assert.match(home,/refImg\("crown",88\)/);
+ assert.doesNotMatch(home,/Find your people/);
+ assert.doesNotMatch(home,/class="big"/);
+ assert.match(html,/const REF_ICONS=\{/);
+ assert.match(html,/id="headerAvatar"/);
+ assert.match(html,/width:100dvh|height:100dvh/);
+ assert.match(html,/#main\{flex:1 1 0%/);
+ assert.match(html,/#room \.rbar\{flex:0 0 auto;display:grid;grid-template-columns:repeat\(3/);
+});
+test('reference room has six real or explicitly disabled actions, not fake gifts or micropayments',()=>{
+ assert.match(html,/data-act="messageFocus"/);
+ assert.match(html,/data-act="roomQuickMenu"/);
+ assert.match(html,/data-act="roomRewards"/);
+ assert.match(html,/data-act="roomGiftPreview"/);
+ assert.match(html,/data-act="leave"/);
+ assert.match(html,/Preview only · Gift sending is not enabled on staging/);
+ assert.match(html,/Room rewards are not active/);
+ assert.match(html,/room_moderator_required/);
+ assert.doesNotMatch(html,/coins:328500/);
+ assert.doesNotMatch(html,/var U=\[\['Luna'/);
+ assert.doesNotMatch(html,/function play\(\)/);
+});
+
+test('all embedded user reference icons resolve, including announcement megaphone',()=>{
+ assert.doesNotMatch(html,/src="undefined"/);
+ assert.match(html,/class="ref-ann-icon"/);
+ assert.match(html,/SURA user-supplied Royal HTML\/mobile-fit styling/);
+});
+
+
+test('room discovery search and country filter use real SURA room results', () => {
+  assert.match(html, /id="roomSearch"/);
+  assert.match(html, /id="roomCountry"/);
+  assert.match(html, /id="roomResults"/);
+  assert.match(html, /data-act="applyCountry"/);
+  assert.match(html, /data-act="myCountry"/);
+  assert.match(html, /data-act="allCountries"/);
+  assert.match(html, /filters\.set\("home_country",homeCountry\)/);
+  assert.match(html, /filters\.set\("country",S\.country\)/);
+  assert.match(html, /S\.roomSearch=String\(e\.target\.value\|\|""\)/);
+  assert.match(html, /String\(r\.name\|\|""\)\.toLocaleLowerCase\(\)\.includes\(search\)/);
+  assert.doesNotMatch(html, /coins:328500/);
+});
+
+
+test('room member popup loads actual profile and leaves voice active until message action', () => {
+  assert.match(html, /id="memberProfileSheet"/);
+  assert.match(html, /id="memberProfileBody"/);
+  assert.match(html, /async function openMemberProfile\(publicId\)/);
+  assert.match(html, /await api\("\/api\/v1\/users\/"\+encodeURIComponent\(id\)\)/);
+  assert.match(html, /else if\(a==="member"\)await openMemberProfile\(el\.dataset\.id\)/);
+  assert.match(html, /else if\(a==="closeMemberProfile"\)closeMemberProfile\(\)/);
+  assert.match(html, /else if\(a==="memberMessage"\)/);
+  assert.match(html, /if\(!E\("memberProfileSheet"\)\.hidden\)\{closeMemberProfile\(\);return true;\}/);
+  assert.doesNotMatch(html, /confirm\(r\.user\.display_name/);
+});
+
+test('background room presence and late navigation responses stay safe', () => {
+  assert.match(html, /navigationSeq:0/);
+  assert.match(html, /requestSeq=\+\+S\.navigationSeq/);
+  assert.match(html, /requestToken!==S\.token\|\|requestSeq!==S\.navigationSeq/);
+  assert.match(html, /if\(a==="authTab"\)\{S\.authGeneration\+\+/);
+  assert.match(html, /document\.addEventListener\("visibilitychange"/);
+  assert.match(html, /if\(document\.hidden\)\{/);
+  assert.match(html, /clearInterval\(S\.poll\);S\.poll=null;/);
+  assert.match(html, /void heartbeat\(\); \/\/ Validate membership immediately after app resumes/);
+  assert.match(html, /if\(!S\.heartbeatUnsupported&&!S\.heartbeatTimer\)/);
+});
+
+test('Moments, inbox and DM show real member profiles without fictional user data', () => {
+  assert.match(html, /class="social-author" data-act="member"/);
+  assert.match(html, /avatar_key:m\.author_avatar_key/);
+  assert.match(html, /id="findMember"/);
+  assert.match(html, /pattern="\[0-9\]\{7,8\}"/);
+  assert.match(html, /class="card thread-card"/);
+  assert.match(html, /class="btn dm-member-profile"/);
+  assert.match(html, /form\.id==="findMember"\)await openMemberProfile/);
+  assert.match(html, /await api\("\/api\/v1\/users\/"\+encodeURIComponent\(id\)\)/);
+});
+
+test('member safety is accessible on actual member profiles and room chat', () => {
+  assert.match(html, /data-act="memberBlock"/);
+  assert.match(html, /data-act="memberReport"/);
+  assert.match(html, /id="memberReportForm"/);
+  assert.match(html, /form\.id==="memberReportForm"/);
+  assert.match(html, /\/api\/v1\/me\/blocks/);
+  assert.match(html, /\/api\/v1\/reports/);
+  assert.match(html, /context_type:"profile"/);
+  assert.match(html, /className="chat-member-name"/);
+  assert.match(html, /async function openDm\(id\)\{if\(!\/\^\\d\{7,8\}\$\//);
+});
+
+test('rooms search across SURA server and profile country is editable',()=>{
+  assert.match(html, /limit:tab==="home"\?"5":"50"/);
+  assert.match(html, /filters\.set\("q",S\.roomSearch\.trim\(\)\)/);
+  assert.match(html, /q:query/);
+  assert.match(html, /setTimeout\(async\(\)=>\{/);
+  assert.match(html, /roomSearchSeq/);
+  assert.match(html, /Search all live rooms/);
+  assert.match(html, /name="country_code"/);
+  assert.match(html, /country_code:String\(d\.get\("country_code"\)\|\|""\)\.trim\(\)\.toUpperCase\(\)/);
+});
+
+test('moderation UI only uses verified backend data and keeps Royal reference layout',()=>{
+ assert.match(html,/id="editProfile"/);
+ assert.match(html,/Review Reports \(Staff\)/);
+ assert.match(html,/data-value="reports"/);
+ assert.match(html,/data-value="blocked"/);
+ assert.match(html,/\/api\/v1\/me\/reports/);
+ assert.match(html,/\/api\/v1\/me\/blocks/);
+ assert.match(html,/\/api\/v1\/staff\/access/);
+ assert.match(html,/\/api\/v1\/staff\/reports\?status=/);
+ assert.match(html,/class="form report-review"/);
+ assert.match(html,/form\.classList\.contains\("report-review"\)/);
+ assert.match(html,/if\(!access\.moderator\)throw Error/);
+ assert.match(html,/if\(!S\.moderator\)throw Error/);
+ assert.match(html,/S\.moderator=false/);
+});
+
+test('account security is server-backed and contains no demo recovery claims', () => {
+ assert.match(html,/id="changePasswordForm"/);
+ assert.match(html,/id="revokeOthersForm"/);
+ assert.match(html,/\/api\/v1\/auth\/change-password/);
+ assert.match(html,/\/api\/v1\/auth\/revoke-other-sessions/);
+ assert.match(html,/name="current_password"/);
+ assert.match(html,/name="confirm_password"/);
+ assert.match(html,/Passwords do not match/);
+ assert.match(html,/Email recovery is not available yet/);
+});
+
+test('wallet page shows real ledger and no pretend currency',()=>{
+ assert.ok(html.includes('/api/v1/me/wallets'));
+ assert.ok(html.includes('S.walletEntries.length'));
+ assert.ok(html.includes('data.transactions_enabled!==false'));
+ assert.ok(html.includes('No SURA wallet records for this account'));
+ assert.ok(html.includes('Buying, sending and exchanging coins are not enabled'));
+});
