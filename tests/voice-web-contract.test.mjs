@@ -13,8 +13,8 @@ test('voice uses a pinned SDK and server-mediated authenticated token',()=>{
   assert.match(html, /\/voice\/token/);
   assert.match(html, /async function joinVoice/);
   assert.match(html, /meeting\.join\(\)/);
-  assert.match(html, /meeting\.self\.enableAudio\(\)/);
-  assert.match(html, /meeting\.self\.disableAudio\(\)/);
+  assert.match(html, /active\.self\.enableAudio\(\)/);
+  assert.match(html, /active\.self\.disableAudio\(\)/);
   assert.match(html, /defaults:\{audio:false,video:false\}/);
   assert.match(html, /await stopVoice\(\)/);
   assert.doesNotMatch(html, /RTK_API_TOKEN/);

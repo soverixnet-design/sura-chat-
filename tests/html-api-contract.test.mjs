@@ -22,7 +22,7 @@ test('auth, real rooms, messages, profile and moments use SURA API', () => {
         '/api/v1/auth/login', '/api/v1/auth/signup', '/api/v1/rooms',
         '/api/v1/messages', '/api/v1/me/profile', '/api/v1/moments'
     ]) assert.ok(html.includes(endpoint), 'missing ' + endpoint);
-    assert.ok(html.includes('Voice unavailable'));
+    assert.ok(html.includes('id="voiceLabel"'));
     assert.ok(html.includes('SURA backend'));
 });
 test('the Android debug launcher is local and production fails closed', () => {
