@@ -116,7 +116,7 @@ public final class MainActivity extends Activity {
         EditText name = register ? field(p, "Nickname (2–40 characters)", InputType.TYPE_CLASS_TEXT, "") : null;
         EditText email = field(p, "Email address", InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS, "");
         EditText pin = field(p, register ? "8-digit numeric password" : "Password",
-                InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_VARIATION_PASSWORD, "");
+                register ? (InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_VARIATION_PASSWORD)\n                        : (InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD), "");
         EditText region = register ? field(p, "Country code (BD, OM, IN…)", InputType.TYPE_CLASS_TEXT, country) : null;
         p.addView(button(register ? "Sign up" : "Sign in", v -> {
             try {
@@ -176,7 +176,7 @@ public final class MainActivity extends Activity {
             StringBuilder out = new StringBuilder();
             for (int i = 0; i < moments.length(); i++) {
                 JSONObject m = moments.optJSONObject(i);
-                if (m != null) out.append("✦ ").append(m.optString("display_name", "User"))
+                if (m != null) out.append("✦ ").append(m.optString("author_name", "User"))
                         .append(": ").append(m.optString("body", "")).append("\n\n");
             }
             feed.setText(out.toString());
