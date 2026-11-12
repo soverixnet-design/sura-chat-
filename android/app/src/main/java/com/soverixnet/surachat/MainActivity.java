@@ -111,6 +111,11 @@ public final class MainActivity extends Activity {
         field.setSingleLine(true);
         field.setText(initial);
         field.setPadding(dp(12), dp(13), dp(12), dp(13));
+        GradientDrawable inputBackground = new GradientDrawable(GradientDrawable.Orientation.TL_BR,
+                new int[]{PANEL, Color.rgb(35, 26, 62)});
+        inputBackground.setCornerRadius(dp(12));
+        inputBackground.setStroke(dp(1), Color.rgb(134, 107, 166));
+        field.setBackground(inputBackground);
         LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(-1, dp(54));
         p.setMargins(0, dp(6), 0, dp(6));
         parent.addView(field, p);
@@ -230,11 +235,49 @@ public final class MainActivity extends Activity {
                 if (room == null) continue;
                 String id = room.optString("id");
                 String name = room.optString("name", "Voice room");
-                p.addView(button("🎙 " + name + "  ·  " + room.optString("country_code", "Global")
-                        + "  ·  " + room.optInt("active_count", 0) + " online",
-                        v -> joinRoom(id, name, room.optString("country_code", ""))));
+                String roomCountry = room.optString("country_code", "Global");
+                LinearLayout tile = new LinearLayout(this);
+                tile.setOrientation(LinearLayout.HORIZONTAL);
+                tile.setGravity(android.view.Gravity.CENTER_VERTICAL);
+                tile.setPadding(dp(13), dp(12), dp(12), dp(12));
+                GradientDrawable bg = new GradientDrawable(GradientDrawable.Orientation.TL_BR,
+                        new int[]{Color.rgb(49, 32, 75), Color.rgb(28, 24, 63)});
+                bg.setCornerRadius(dp(18));
+                bg.setStroke(dp(1), Color.rgb(137, 106, 163));
+                tile.setBackground(bg);
+                tile.setElevation(dp(3));
+                LinearLayout.LayoutParams card = new LinearLayout.LayoutParams(-1, dp(90));
+                card.setMargins(dp(3), dp(6), dp(3), dp(6));
+                TextView crest = text("✦", 29, GOLD);
+                crest.setGravity(android.view.Gravity.CENTER);
+                crest.setBackground(bgForCrest());
+                tile.addView(crest, new LinearLayout.LayoutParams(dp(55), dp(55)));
+                LinearLayout words = new LinearLayout(this);
+                words.setOrientation(LinearLayout.VERTICAL);
+                words.setPadding(dp(11), 0, 0, 0);
+                TextView title = text(name, 16, Color.WHITE);
+                title.setTypeface(null, Typeface.BOLD);
+                title.setSingleLine(true);
+                title.setEllipsize(android.text.TextUtils.TruncateAt.END);
+                words.addView(title);
+                words.addView(text((roomCountry.equals("null") ? "Global" : roomCountry)
+                        + "  ·  " + room.optInt("active_count", 0) + " members", 11, MUTED));
+                tile.addView(words, new LinearLayout.LayoutParams(0, -2, 1));
+                TextView enter = text("›", 30, GOLD);
+                enter.setGravity(android.view.Gravity.CENTER);
+                tile.addView(enter, new LinearLayout.LayoutParams(dp(32), -1));
+                tile.setOnClickListener(v -> joinRoom(id, name, roomCountry));
+                p.addView(tile, card);
             }
         });
+    }
+
+    private GradientDrawable bgForCrest() {
+        GradientDrawable d = new GradientDrawable(GradientDrawable.Orientation.TL_BR,
+                new int[]{Color.rgb(66, 48, 99), Color.rgb(20, 25, 53)});
+        d.setShape(GradientDrawable.OVAL);
+        d.setStroke(dp(2), GOLD);
+        return d;
     }
 
     private void showCreate() {
@@ -331,7 +374,15 @@ public final class MainActivity extends Activity {
     }
 
     @Override public void onBackPressed() {
-        if (!"login".equals(view)) showRooms("all", "popular");
-        else super.onBackPressed();
+        if ("login".equals(view)) {
+            super.onBackPressed();
+            return;
+        }
+        new android.app.AlertDialog.Builder(this)
+                .setTitle("Exit SURA CHAT?")
+                .setMessage("Close the app? Your account stays signed in only until the app restarts.")
+                .setNegativeButton("Stay", null)
+                .setPositiveButton("Exit", (dialog, which) -> finish())
+                .show();
     }
 }
