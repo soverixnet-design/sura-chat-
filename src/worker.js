@@ -449,6 +449,58 @@ async function login(request, env) {
     country_code: credential.country_code, bio: credential.bio, avatar_key: credential.avatar_key }, token, token_type: 'Bearer', expires_in: SESSION_LIFETIME_MS / 1000 });
 }
 
+// A signed-in user can strengthen a legacy eight-digit PIN without email OTP.
+// Both operations require the current password and are per-account rate limited.
+// Existing logins and legacy sign-up PINs remain compatible during staging.
+async function verifyCurrentPassword(request, env, password, purpose) {
+  const me = await currentUser(request, env);
+  await rateLimit(request, env, purpose, me.id);
+  if (typeof password !== 'string' || !password || password.length > 128)
+    throw new HttpError(400, 'invalid_current_password');
+  const credential = await env.DB.prepare(`SELECT salt_b64, password_hash_b64, iterations
+    FROM user_credentials WHERE user_id = ?`).bind(me.id).first();
+  if (!credential) throw new HttpError(401, 'session_expired');
+  const actual = await hashPassword(password, unb64(credential.salt_b64), credential.iterations);
+  if (!equalBytes(actual, unb64(credential.password_hash_b64)))
+    throw new HttpError(401, 'invalid_current_password');
+  return { me, credential };
+}
+async function changeMyPassword(request, env) {
+  const data = await readJson(request);
+  const newPassword = data.new_password;
+  if (typeof newPassword !== 'string' || newPassword.length < 10 ||
+      newPassword.length > 64 || !/[A-Za-z]/.test(newPassword) ||
+      !/[0-9]/.test(newPassword) || /[\x00-\x1F\x7F]/.test(newPassword))
+    throw new HttpError(400, 'weak_new_password');
+  const { me, credential } = await verifyCurrentPassword(request, env, data.current_password, 'auth-password-change');
+  if (String(data.current_password) === newPassword)
+    throw new HttpError(400, 'password_unchanged');
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const passwordHash = await hashPassword(newPassword, salt);
+  // Compare-and-swap prevents an old verification from overwriting a later
+  // credential change triggered in another session.
+  const updated = await env.DB.prepare(`UPDATE user_credentials
+    SET salt_b64 = ?, password_hash_b64 = ?, iterations = ?
+    WHERE user_id = ? AND password_hash_b64 = ?`)
+    .bind(b64(salt), b64(passwordHash), PASSWORD_ITERATIONS, me.id, credential.password_hash_b64).run();
+  if (updated.meta?.changes !== 1) throw new HttpError(409, 'password_changed_elsewhere');
+  // Leave the requesting session alive; revoke other phones immediately.
+  const tokenHash = await sha256(request.headers.get('Authorization').slice(7));
+  await env.DB.prepare(`UPDATE auth_sessions SET revoked_at_ms = ?
+    WHERE user_id = ? AND token_sha256 <> ? AND revoked_at_ms IS NULL`)
+    .bind(Date.now(), me.id, tokenHash).run();
+  return json({ password_changed: true, other_sessions_revoked: true });
+}
+async function revokeOtherSessions(request, env) {
+  const data = await readJson(request);
+  const { me } = await verifyCurrentPassword(request, env, data.current_password, 'auth-session-revoke');
+  const tokenHash = await sha256(request.headers.get('Authorization').slice(7));
+  const result = await env.DB.prepare(`UPDATE auth_sessions SET revoked_at_ms = ?
+    WHERE user_id = ? AND token_sha256 <> ? AND revoked_at_ms IS NULL`)
+    .bind(Date.now(), me.id, tokenHash).run();
+  return json({ other_sessions_revoked: true, count: Number(result.meta?.changes || 0) });
+}
+
 async function createRoom(request, env) {
   const user = await currentUser(request, env);
   await rateLimit(request, env, 'rooms-create');
@@ -993,6 +1045,8 @@ export default {
       if (request.method === 'POST') {
         if (path === '/api/v1/auth/signup') return await signup(request, env);
         if (path === '/api/v1/auth/login') return await login(request, env);
+        if (path === '/api/v1/auth/change-password') return await changeMyPassword(request, env);
+        if (path === '/api/v1/auth/revoke-other-sessions') return await revokeOtherSessions(request, env);
         if (path === '/api/v1/me/profile') return await updateMyProfile(request, env);
         if (path === '/api/v1/me/avatar') return await uploadMyAvatar(request, env);
         if (path === '/api/v1/me/blocks') return await updateMyBlocks(request, env);
