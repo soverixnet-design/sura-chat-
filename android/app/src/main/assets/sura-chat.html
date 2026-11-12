@@ -223,7 +223,7 @@ nav button b img{display:block;margin:0 auto 2px;filter:drop-shadow(0 2px 3px #0
 "use strict";
 (function(){
  const API="https://sura-chat-api-staging.soverixnet.workers.dev";
- const S={token:"",user:null,tab:"home",signup:false,rooms:[],moments:[],threads:[],scope:"all",sort:"popular",roomId:"",seatSig:"",after:0,poll:null,heartbeatTimer:null,heartbeatUnsupported:false,busy:false,peer:"",peerName:"",dm:[],voice:{meeting:null,roomId:"",role:"",busy:false,generation:0}};
+ const S={token:"",user:null,tab:"home",signup:false,rooms:[],moments:[],threads:[],scope:"all",sort:"popular",roomId:"",seatSig:"",after:0,poll:null,heartbeatTimer:null,heartbeatUnsupported:false,roomSyncPromise:null,roomGeneration:0,busy:false,peer:"",peerName:"",dm:[],voice:{meeting:null,roomId:"",role:"",busy:false,generation:0}};
  const E=id=>document.getElementById(id);
  const safe=v=>String(v==null?"":v).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
  const fmt=v=>Number(v||0).toLocaleString("en-US");
@@ -234,7 +234,7 @@ nav button b img{display:block;margin:0 auto 2px;filter:drop-shadow(0 2px 3px #0
   try{const r=await fetch(API+path,{method,headers,body:payload===undefined?undefined:JSON.stringify(payload),signal:c.signal,cache:"no-store"});const j=await r.json().catch(()=>({error:"invalid_response"}));if(!r.ok){if(r.status===401&&S.token)showLogin();throw Error(j.error||"HTTP "+r.status);}return j;}
   catch(e){throw Error(e.name==="AbortError"?"Connection timeout":e instanceof TypeError?"network_unavailable":e.message);}finally{clearTimeout(timer);}
  }
- function showLogin(){void stopVoice();clearInterval(S.poll);clearInterval(S.heartbeatTimer);S.poll=null;S.heartbeatTimer=null;S.roomId="";S.token="";S.user=null;S.signup=false;E("header").hidden=E("main").hidden=E("nav").hidden=true;E("room").hidden=true;E("room").classList.remove("show");E("login").hidden=false;authForm();}
+ function showLogin(){void stopVoice();clearInterval(S.poll);clearInterval(S.heartbeatTimer);S.poll=null;S.heartbeatTimer=null;S.roomGeneration++;S.roomSyncPromise=null;S.roomId="";S.token="";S.user=null;S.signup=false;E("header").hidden=E("main").hidden=E("nav").hidden=true;E("room").hidden=true;E("room").classList.remove("show");E("login").hidden=false;authForm();}
  function authMessage(error,signup){
   const code=String(error&&error.message||"unknown");
   if(code==="invalid_credentials")return "Email or password is incorrect. If this is your first time in SURA CHAT, choose Sign Up.";
@@ -298,7 +298,7 @@ nav button b img{display:block;margin:0 auto 2px;filter:drop-shadow(0 2px 3px #0
  }
  function endLocalRoom(message){
    void stopVoice();clearInterval(S.poll);clearInterval(S.heartbeatTimer);
-   S.poll=null;S.heartbeatTimer=null;S.roomId="";
+   S.poll=null;S.heartbeatTimer=null;S.roomGeneration++;S.roomSyncPromise=null;S.roomId="";
    E("room").hidden=true;E("room").classList.remove("show");
    toast(message);go("rooms");
  }
@@ -445,20 +445,96 @@ nav button b img{display:block;margin:0 auto 2px;filter:drop-shadow(0 2px 3px #0
      S.voice.busy=false;
    }
  }
- async function enter(id){if(S.busy||S.roomId)return;if(!/^[a-f0-9-]{36}$/i.test(id))return toast("Bad room ID");S.busy=true;try{await api("/api/v1/rooms/"+id+"/join","POST",{});S.roomId=id;S.heartbeatUnsupported=false;S.after=0;voiceStatus("Join Voice");voiceNet("Tap Join Voice to listen");S.seatSig="";E("chat").textContent="";E("room").hidden=false;E("room").classList.add("show");await heartbeat();await syncRoom();S.poll=setInterval(()=>syncRoom().catch(e=>toast(e.message)),4000);if(!S.heartbeatUnsupported)S.heartbeatTimer=setInterval(heartbeat,25000);}catch(e){toast(e.message);}finally{S.busy=false;}}
- async function syncRoom(){
-  const id=S.roomId;if(!id)return;
-  const [a,b]=await Promise.all([api("/api/v1/rooms/"+id+"/seats"),api("/api/v1/rooms/"+id+"/messages?after="+S.after)]);
-  if(id!==S.roomId)return;E("roomName").textContent=a.room.name;E("roomInfo").textContent=a.room.seat_count+" seats · "+a.room.status;E("announcement").textContent=a.room.announcement||"No announcement";
-  const sig=JSON.stringify(a.seats);if(sig!==S.seatSig){S.seatSig=sig;E("seats").innerHTML=(a.seats||[]).map(s=>'<button class="seat" data-act="'+(s.public_id?'member':'seat')+'" data-id="'+safe(s.public_id||"")+'" data-n="'+Number(s.seat_number)+'"><div class="av">'+(s.is_locked?'🔒':s.public_id?'👤':'＋')+'</div><small>'+safe(s.display_name||(s.is_locked?'Locked':'Open'))+'</small><small>'+Number(s.seat_number)+'</small></button>').join("");}
-  for(const m of (b.messages||[])){const p=document.createElement("p"),name=document.createElement("b");name.textContent=m.sender_name?m.sender_name+": ":"";p.appendChild(name);p.appendChild(document.createTextNode(m.body||""));E("chat").appendChild(p);S.after=Math.max(S.after,Number(m.id)||0);}
-  while(E("chat").childNodes.length>80)E("chat").removeChild(E("chat").firstChild);if((b.messages||[]).length)E("chat").scrollTop=E("chat").scrollHeight;
+ async function enter(id){
+  if(S.busy||S.roomId)return;
+  if(!/^[a-f0-9-]{36}$/i.test(id))return toast("Bad room ID");
+  S.busy=true;
+  try{
+   // Only join on an authenticated server acknowledgement. No auto-sitting.
+   await api("/api/v1/rooms/"+id+"/join","POST",{});
+   S.roomId=id;S.roomGeneration++;S.roomSyncPromise=null;
+   S.heartbeatUnsupported=false;S.after=0;S.seatSig="";
+   E("chat").textContent="";E("seats").textContent="";
+   voiceStatus("Join Voice");voiceNet("Tap Join Voice to listen");
+   E("room").hidden=false;E("room").classList.add("show");
+   // Start timers before the first room sync. One failed HTTP request must not
+   // strand a visible room with no retry / permanent spinner.
+   S.poll=setInterval(()=>{void syncRoom().catch(e=>toast("Room refresh: "+e.message));},4000);
+   S.heartbeatTimer=setInterval(()=>{void heartbeat();},25000);
+   void heartbeat();
+   void syncRoom().catch(e=>toast("Room loading: "+e.message));
+  }catch(e){toast("Cannot enter room: "+e.message);}
+  finally{S.busy=false;}
  }
- async function leave(){if(!S.roomId)return;const id=S.roomId;clearInterval(S.poll);clearInterval(S.heartbeatTimer);S.poll=null;S.heartbeatTimer=null;await stopVoice();try{await api("/api/v1/rooms/"+id+"/leave","POST",{});S.roomId="";E("room").hidden=true;E("room").classList.remove("show");go("rooms");}catch(e){toast("Exit failed: "+e.message);S.poll=setInterval(()=>syncRoom().catch(()=>{}),4000);if(!S.heartbeatUnsupported)S.heartbeatTimer=setInterval(heartbeat,25000);}}
+ function stableSeatSignature(seats){
+  // Ignore server-side updated_at timestamps: rebuilding the grid for heartbeat
+  // changes makes seat icons shake and interrupts user taps.
+  return JSON.stringify((seats||[]).map(s=>[
+   Number(s.seat_number),String(s.public_id||""),String(s.display_name||""),Boolean(s.is_locked)
+  ]));
+ }
+ function syncRoom(){
+  if(!S.roomId)return Promise.resolve();
+  if(S.roomSyncPromise)return S.roomSyncPromise;
+  const id=S.roomId,generation=S.roomGeneration;
+  const task=(async()=>{
+   const [a,b]=await Promise.all([
+    api("/api/v1/rooms/"+id+"/seats"),
+    api("/api/v1/rooms/"+id+"/messages?after="+S.after)
+   ]);
+   if(id!==S.roomId||generation!==S.roomGeneration)return;
+   if(!a||!a.room||!Array.isArray(a.seats)||!b||!Array.isArray(b.messages))throw Error("Invalid room response");
+   E("roomName").textContent=a.room.name;
+   E("roomInfo").textContent=a.room.seat_count+" seats · "+a.room.status;
+   E("announcement").textContent=a.room.announcement||"No announcement";
+   const sig=stableSeatSignature(a.seats);
+   if(sig!==S.seatSig){
+    S.seatSig=sig;
+    E("seats").innerHTML=a.seats.map(s=>'<button class="seat" data-act="'+(s.public_id?'member':'seat')+'" data-id="'+safe(s.public_id||"")+'" data-n="'+Number(s.seat_number)+'"><div class="av">'+(s.is_locked?'🔒':s.public_id?'👤':'＋')+'</div><small>'+safe(s.display_name||(s.is_locked?'Locked':'Open'))+'</small><small>'+Number(s.seat_number)+'</small></button>').join("");
+   }
+   for(const m of b.messages){
+    const messageId=Number(m.id)||0;
+    if(messageId<=S.after)continue;
+    const p=document.createElement("p"),name=document.createElement("b");
+    name.textContent=m.sender_name?m.sender_name+": ":"";
+    p.appendChild(name);p.appendChild(document.createTextNode(m.body||""));
+    E("chat").appendChild(p);S.after=messageId;
+   }
+   while(E("chat").childNodes.length>80)E("chat").removeChild(E("chat").firstChild);
+   if(b.messages.length)E("chat").scrollTop=E("chat").scrollHeight;
+  })();
+  S.roomSyncPromise=task;
+  // Clear even after failed fetch, so the next 4-second poll can retry.
+  task.then(()=>{if(S.roomSyncPromise===task)S.roomSyncPromise=null;},
+            ()=>{if(S.roomSyncPromise===task)S.roomSyncPromise=null;});
+  return task;
+ }
+ async function leave(targetTab="rooms"){
+  if(!S.roomId){if(targetTab)void go(targetTab);return;}
+  const id=S.roomId,session=S.token;
+  S.roomId="";S.roomGeneration++;S.roomSyncPromise=null;
+  clearInterval(S.poll);clearInterval(S.heartbeatTimer);
+  S.poll=null;S.heartbeatTimer=null;S.seatSig="";
+  // Hide and navigate locally immediately; stopVoice closes audio independently.
+  void stopVoice();
+  E("room").hidden=true;E("room").classList.remove("show");
+  E("seats").textContent="";
+  if(targetTab)void go(targetTab);
+  try{
+   await api("/api/v1/rooms/"+id+"/leave","POST",{});
+  }catch(e){
+   // Retry only while the user has not rejoined the SAME room; otherwise an
+   // old leave request could incorrectly remove their new membership.
+   if(S.roomId!==id&&S.token===session){
+    try{await api("/api/v1/rooms/"+id+"/leave","POST",{});}
+    catch(second){toast("Room closed on phone, but server exit needs retry: "+second.message);}
+   }
+  }
+ }
  async function openDm(id){if(!/^\d{7}$/.test(id))return toast("Invalid member ID");const r=await api("/api/v1/messages/"+id);S.peer=id;S.peerName=(r.peer && r.peer.display_name)||id;S.dm=r.messages||[];S.tab="dm";nav();render();}
  document.addEventListener("click",async e=>{const el=e.target.closest("[data-act]");if(!el)return;try{const a=el.dataset.act;
   if(a==="authTab"){S.signup=el.dataset.value==="signup";authForm();}
-  else if(a==="tab"){if(S.roomId)await leave();go(el.dataset.value);}
+  else if(a==="tab"){if(S.roomId)void leave(el.dataset.value);else go(el.dataset.value);}
   else if(a==="scope"){S.scope=el.dataset.value;S.sort=el.dataset.sort;go("rooms");}
   else if(a==="enter")await enter(el.dataset.id);
   else if(a==="leave")await leave();
@@ -466,7 +542,7 @@ nav button b img{display:block;margin:0 auto 2px;filter:drop-shadow(0 2px 3px #0
   else if(a==="stand"){await stopVoice();await api("/api/v1/rooms/"+S.roomId+"/stand","POST",{});await syncRoom();}
   else if(a==="member"){const r=await api("/api/v1/users/"+el.dataset.id);if(confirm(r.user.display_name+" · ID "+el.dataset.id+"\nOpen chat?")){await leave();await openDm(el.dataset.id);}}
   else if(a==="voice")await joinVoice();
-  else if(a==="catalog"){if(S.roomId)await leave();go("catalog");}
+  else if(a==="catalog"){if(S.roomId)void leave("catalog");else go("catalog");}
   else if(a==="openDm")await openDm(el.dataset.id);
   else if(a==="logout"){await stopVoice();await api("/api/v1/auth/logout","POST",{}).catch(()=>{});showLogin();}
  }catch(err){toast(err.message);}});
