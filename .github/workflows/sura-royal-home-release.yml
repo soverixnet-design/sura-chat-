@@ -1,0 +1,37 @@
+name: Publish SURA 0.5.12 Royal Home TEST APK
+on:
+  push:
+    branches: [feature/sura-royal-home-redesign-20261112]
+    paths: ['.github/workflows/sura-royal-home-release.yml']
+permissions:
+  contents: write
+  actions: read
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check source QA and actual Android APK build
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          test "$(gh run view 43283816533 --repo "$GITHUB_REPOSITORY" --json conclusion --jq '.conclusion')" = success
+          test "$(gh run view 43283816635 --repo "$GITHUB_REPOSITORY" --json conclusion --jq '.conclusion')" = success
+      - name: Download and checksum the APK
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p out
+          gh run download 43283816635 --repo "$GITHUB_REPOSITORY" --name sura-chat-debug-unverified --dir out
+          mv out/app-debug.apk out/SURA_CHAT_Royal_3D_v0.5.12_Home_Redesign_Staging.apk
+          printf '%s  %s\n' '143b17fe14ae8c2b3ecef7de81b45dc9b3bf811f7bbbec2e1824a0a5cb5f2817' 'out/SURA_CHAT_Royal_3D_v0.5.12_Home_Redesign_Staging.apk' | sha256sum -c -
+      - name: Publish direct-download GitHub prerelease TEST ONLY
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create sura-chat-v0.5.12-staging             'out/SURA_CHAT_Royal_3D_v0.5.12_Home_Redesign_Staging.apk#SURA CHAT Royal Home Redesign staging TEST APK'             --repo "$GITHUB_REPOSITORY"             --target '97ec28d9f7f32d22c9d3b5ef9297d32b15482f14'             --title 'SURA CHAT v0.5.12 — Royal home redesign (TEST APK)'             --notes 'Staging test only: fixes the giant orange crown/hero CSS class collision visible in user screenshot. Replaces with compact royal purple/gold banner, accessible four-feature shortcuts, server-backed featured room summaries, useful navigation, and stable Android bottom navigation. Preserves v0.5.11 voice reconnect, v0.5.10 safe login, and room/profile features. API and Android build checks passed. Real phone screenshot and two-device voice QA not yet confirmed; not a Play Store release.'             --prerelease
+      - name: Verify public release asset
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view sura-chat-v0.5.12-staging --repo "$GITHUB_REPOSITORY" --json assets,tagName,isPrerelease,url

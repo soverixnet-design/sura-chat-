@@ -10,7 +10,7 @@ const manifest = readFileSync(new URL('../android/app/src/main/AndroidManifest.x
 test('the bundled design matches the web source', () => {
     assert.equal(html, web);
     assert.match(html, /SURA CHAT/);
-    assert.match(html, /class="card banner"/);
+    assert.match(html, /class="card banner(?: [^"]+)?"/);
 });
 test('no demo coin spending, fake users or randomized winners', () => {
     for (const bad of ['coins:328500', "['Luna'", 'Google (demo)', 'Apple (demo)', 'Math.random()', 'onclick="buy(']) {
@@ -138,4 +138,25 @@ test('session persistence retains late-401 and safe room logout protections',()=
  assert.match(html,/if\(S\.roomId\)await leave\(null\)/);
  assert.match(html,/async function leave\(targetTab="rooms"\)/);
  assert.match(html,/S\.authGeneration\+\+/);
+});
+
+
+test('royal home banner cannot inherit large orange .big button styling',()=>{
+ const home=html.slice(html.indexOf('if(S.tab==="home"){'),html.indexOf('else if(S.tab==="rooms")'));
+ assert.match(home,/class="card banner home-hero"/);
+ assert.match(home,/class="home-emblem"/);
+ assert.doesNotMatch(home,/class="big"/);
+ assert.match(html,/#main\{flex:1 1 0%;min-height:0/);
+ assert.match(html,/#nav\{flex:0 0 auto/);
+});
+test('new home uses authentic featured room numbers and real navigation only',()=>{
+ const home=html.slice(html.indexOf('if(S.tab==="home"){'),html.indexOf('else if(S.tab==="rooms")'));
+ assert.match(home,/const featured=S\.rooms\|\|\[\]/);
+ assert.match(home,/featured\.reduce/);
+ assert.match(home,/\+roomCards\(\)/);
+ for(const nav of ['rooms','messages','moments','profile']){
+   assert.match(home,new RegExp('data-value="'+nav+'"'));
+ }
+ assert.doesNotMatch(home,/data-value="events"/);
+ assert.doesNotMatch(home,/fake|demo coins|random winner/i);
 });
