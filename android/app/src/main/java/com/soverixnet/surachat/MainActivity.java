@@ -102,6 +102,35 @@ public final class MainActivity extends Activity {
         return b;
     }
 
+
+    // Royal icon cards stay within the existing navigation, not new payment flows.
+    private LinearLayout featureCard(String heading, String subtitle, String iconName, View.OnClickListener action) {
+        LinearLayout card = new LinearLayout(this);
+        card.setOrientation(LinearLayout.HORIZONTAL);
+        card.setGravity(android.view.Gravity.CENTER_VERTICAL);
+        card.setPadding(dp(9), dp(7), dp(12), dp(7));
+        GradientDrawable panel = new GradientDrawable(GradientDrawable.Orientation.TL_BR,
+                new int[]{PANEL, Color.rgb(28, 26, 62)});
+        panel.setCornerRadius(dp(17));
+        panel.setStroke(dp(1), GOLD);
+        card.setBackground(panel);
+        card.addView(RoyalIcons.view(this, iconName, 57, "✦"),
+                new LinearLayout.LayoutParams(dp(60), dp(60)));
+        LinearLayout labels = new LinearLayout(this);
+        labels.setOrientation(LinearLayout.VERTICAL);
+        labels.setPadding(dp(10), 0, 0, 0);
+        TextView title = text(heading, 15, WHITE);
+        title.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        labels.addView(title);
+        labels.addView(text(subtitle, 12, MUTED));
+        card.addView(labels, new LinearLayout.LayoutParams(0, -2, 1));
+        if (action != null) card.setOnClickListener(action);
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, dp(85));
+        params.setMargins(dp(2), dp(5), dp(2), dp(5));
+        card.setLayoutParams(params);
+        return card;
+    }
+
     private EditText field(LinearLayout parent, String hint, int inputType, String initial) {
         EditText field = new EditText(this);
         field.setHint(hint);
@@ -173,13 +202,15 @@ public final class MainActivity extends Activity {
         LinearLayout tabs = new LinearLayout(this);
         tabs.setOrientation(LinearLayout.HORIZONTAL);
         String[] names = {"Home", "Rooms", "Create", "Messages", "Me"};
+        String[] icons = {"sura_community", "sura_voice_support", "sura_announcement", "sura_messages", "sura_special_id"};
         Runnable[] actions = {this::showHome, () -> showRooms("all","popular"),
             this::showCreate, this::showMessages, this::showMe};
         for (int i = 0; i < names.length; i++) {
             final int selected = i;
             Button b = button(names[i], v -> actions[selected].run());
-            b.setTextSize(11);
-            LinearLayout.LayoutParams layout = new LinearLayout.LayoutParams(0, dp(47), 1);
+            b.setTextSize(10);
+            RoyalIcons.decorateButton(this, b, icons[i], 18, true);
+            LinearLayout.LayoutParams layout = new LinearLayout.LayoutParams(0, dp(51), 1);
             layout.setMargins(dp(1), dp(5), dp(1), dp(5));
             tabs.addView(b, layout);
         }
@@ -189,6 +220,11 @@ public final class MainActivity extends Activity {
 
     private void showHome() {
         LinearLayout p = shell("Home · Discover");
+        p.addView(featureCard("Voice Rooms", "Join a Royal Lounge", "sura_voice_support",
+                v -> showRooms("all", "popular")));
+        p.addView(featureCard("Private Messages", "Your conversations", "sura_messages",
+                v -> showMessages()));
+        p.addView(featureCard("Community", "Latest moments and people", "sura_community", null));
         p.addView(text("Latest Moments", 19, GOLD));
         TextView feed = text("Loading Moments…", 14, MUTED);
         p.addView(feed);
@@ -250,8 +286,7 @@ public final class MainActivity extends Activity {
                 tile.setElevation(dp(3));
                 LinearLayout.LayoutParams card = new LinearLayout.LayoutParams(-1, dp(90));
                 card.setMargins(dp(3), dp(6), dp(3), dp(6));
-                TextView crest = text("✦", 29, GOLD);
-                crest.setGravity(android.view.Gravity.CENTER);
+                View crest = RoyalIcons.view(this, "sura_voice_support", 55, "✦");
                 crest.setBackground(bgForCrest());
                 tile.addView(crest, new LinearLayout.LayoutParams(dp(55), dp(55)));
                 LinearLayout words = new LinearLayout(this);
@@ -347,6 +382,7 @@ public final class MainActivity extends Activity {
 
     private void showMessages() {
         LinearLayout p = shell("Messages");
+        p.addView(featureCard("Private Chat", "One-to-one conversations", "sura_messages", null));
         TextView list = text("Loading private conversations…", 14, MUTED);
         p.addView(list);
         api.get("/api/v1/messages/threads", (code, json) -> {
@@ -387,7 +423,11 @@ public final class MainActivity extends Activity {
                 });
             } catch (Exception ignored) { }
         }));
-        p.addView(text("VIP · CP · Noble · Gift video · Wallet features: design only; not transactable yet.", 13, MUTED));
+        p.addView(featureCard("Special ID · Preview", "Royal profile ID design", "sura_special_id", null));
+        p.addView(featureCard("VIP · Preview", "VIP decoration only", "sura_vip", null));
+        p.addView(featureCard("Coin Wallet · Preview", "Coin transactions are disabled", "sura_coin_rewards", null));
+        p.addView(featureCard("Diamond Wallet · Preview", "Diamonds are not yet enabled", "sura_diamond_wallet", null));
+        p.addView(featureCard("Recharge · Preview", "Purchases are not yet enabled", "sura_recharge", null));
         p.addView(button("Sign out", v -> api.post("/api/v1/auth/logout", new JSONObject(), (code, body) -> {
             api.setSession("");
             country = "";
