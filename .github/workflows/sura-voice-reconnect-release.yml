@@ -1,0 +1,37 @@
+name: Publish SURA v0.5.11 voice reconnect TEST APK
+on:
+  push:
+    branches: [feature/sura-voice-reconnect-race-20261112]
+    paths: ['.github/workflows/sura-voice-reconnect-release.yml']
+permissions:
+  contents: write
+  actions: read
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Require passing executable voice-race tests and Android build
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          test "$(gh run view 43275568374 --repo "$GITHUB_REPOSITORY" --json conclusion --jq '.conclusion')" = success
+          test "$(gh run view 43275568242 --repo "$GITHUB_REPOSITORY" --json conclusion --jq '.conclusion')" = success
+      - name: Download the exact tested Android debug APK
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p out
+          gh run download 43275568242 --repo "$GITHUB_REPOSITORY" --name sura-chat-debug-unverified --dir out
+          mv out/app-debug.apk out/SURA_CHAT_Royal_3D_v0.5.11_Voice_Reconnect_Staging.apk
+          printf '%s  %s\n' '673cee92f9c9b86b6c9754d6d3c2962098cadcaf41cdaf70a2edb0698a1e115f' 'out/SURA_CHAT_Royal_3D_v0.5.11_Voice_Reconnect_Staging.apk' | sha256sum --check
+      - name: Publish direct GitHub APK download as staging pre-release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create sura-chat-v0.5.11-staging             'out/SURA_CHAT_Royal_3D_v0.5.11_Voice_Reconnect_Staging.apk#SURA CHAT Royal 3D v0.5.11 TEST APK'             --repo "$GITHUB_REPOSITORY"             --target 'b93fcde07b779e29dba07bef78cd64bcea301704'             --title 'SURA CHAT 0.5.11 — Voice reconnect fix (TEST APK)'             --notes 'TEST-ONLY Android debug APK. Includes 0.5.10 remembered-login, avatar and safe room exit. Fixes RealtimeKit Join Voice stuck after switching rooms while a prior connection is still pending; generation-owned cleanup prevents older promises from clearing newer room state. Executable two-room simulated SDK concurrency test and Android debug build passed. No claim of actual two-phone audible voice. Cloudflare production, user data, Google Play and billing not changed.'             --prerelease
+      - name: Verify release URL and asset listing
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view sura-chat-v0.5.11-staging --repo "$GITHUB_REPOSITORY" --json tagName,isPrerelease,assets,url
