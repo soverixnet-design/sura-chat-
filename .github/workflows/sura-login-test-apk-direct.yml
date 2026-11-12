@@ -1,0 +1,46 @@
+name: Publish SURA v0.5.5 TEST APK direct link
+on:
+  push:
+    branches: [feature/sura-real-login-staging-20261112]
+    paths: ['.github/workflows/sura-login-test-apk-direct.yml']
+permissions:
+  contents: write
+  actions: write
+jobs:
+  publish-test-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check successful backend tests and APK build
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          test "$(gh run view 43253112246 --repo "$GITHUB_REPOSITORY" --json conclusion --jq '.conclusion')" = success
+          test "$(gh run view 43252409774 --repo "$GITHUB_REPOSITORY" --json conclusion --jq '.conclusion')" = success
+      - name: Verify APK from GitHub build and stage exact release asset
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p out
+          gh run download 43253112246 --repo "$GITHUB_REPOSITORY" --name sura-chat-debug-unverified --dir out
+          mv out/app-debug.apk out/SURA_CHAT_Royal_3D_v0.5.5_Login_Staging.apk
+          printf '%s  %s\n' 'd67b63ed861bfc8ea377d007224506d735e2665c94ed7a50882dfee17783c835' 'out/SURA_CHAT_Royal_3D_v0.5.5_Login_Staging.apk' | sha256sum -c -
+      - name: Cancel our older release gate to prevent a duplicate
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api -X POST "repos/$GITHUB_REPOSITORY/actions/runs/43254452306/cancel" || true
+      - name: Publish v0.5.5 TEST build as direct GitHub APK asset
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view sura-chat-v0.5.5-staging --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload sura-chat-v0.5.5-staging 'out/SURA_CHAT_Royal_3D_v0.5.5_Login_Staging.apk#SURA CHAT v0.5.5 login-test APK' --repo "$GITHUB_REPOSITORY" --clobber
+          else
+            gh release create sura-chat-v0.5.5-staging 'out/SURA_CHAT_Royal_3D_v0.5.5_Login_Staging.apk#SURA CHAT v0.5.5 login-test APK' --repo "$GITHUB_REPOSITORY" --target '7a8f1ab140d3d260dfaacff97760bd894d6df736' --title 'SURA CHAT 0.5.5 login troubleshooting (TEST APK)' --notes 'STAGING DEBUG TEST APK ONLY. Build and API contract tests passed; a synthetic SURA account was created, explicitly logged out and successfully logged in again (two sessions, first revoked), verified in staging D1. Login now explains incorrect email/PIN, account exists and connectivity failures. The complete Android emulator profile/rooms acceptance run was not confirmed at publication time. No Google sign-in or Play Store publication. No proof of two-phone audible voice, background audio, gift or coin functionality.' --prerelease
+          fi
+      - name: Confirm exact publicly accessible GitHub release asset
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view sura-chat-v0.5.5-staging --repo "$GITHUB_REPOSITORY" --json tagName,isPrerelease,assets,url
