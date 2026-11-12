@@ -1,0 +1,37 @@
+name: Publish SURA 0.5.7 Room Manager TEST APK
+on:
+  push:
+    branches: [feature/sura-room-manager-ui-staging-20261112]
+    paths: ['.github/workflows/sura-room-manager-release.yml']
+permissions:
+  contents: write
+  actions: read
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Validate source checks and successful Android build
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          test "$(gh run view 43259212023 --repo "$GITHUB_REPOSITORY" --json conclusion --jq '.conclusion')" = success
+          test "$(gh run view 43259211809 --repo "$GITHUB_REPOSITORY" --json conclusion --jq '.conclusion')" = success
+      - name: Retrieve and verify exact Android APK
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p out
+          gh run download 43259211809 --repo "$GITHUB_REPOSITORY" --name sura-chat-debug-unverified --dir out
+          mv out/app-debug.apk out/SURA_CHAT_Royal_3D_v0.5.7_Room_Manager_Staging.apk
+          printf '%s  %s\n' '9495c54da3c58e93211701ed667d95afc675d902cd5996ed47306c0e2551de36' 'out/SURA_CHAT_Royal_3D_v0.5.7_Room_Manager_Staging.apk' | sha256sum -c -
+      - name: Publish public GitHub test pre-release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create sura-chat-v0.5.7-staging             'out/SURA_CHAT_Royal_3D_v0.5.7_Room_Manager_Staging.apk#SURA CHAT Royal 3D Room Manager Staging APK'             --repo "$GITHUB_REPOSITORY"             --target '9f86948eee71c84183fcc7876111cf04153009dd'             --title 'SURA CHAT 0.5.7 — Room manager (TEST APK)'             --notes 'Android TEST-ONLY build: includes 0.5.6 room refresh/leave stability and role-checked room owner/admin UI. Owners can edit room announcement, name, lock state, seat count and appoint admins; owners/admins can lock empty seats and moderate active users. API and Android build checks passed; device owner/admin actions, two-device audible voice, background audio, Google login and purchases are not fully verified. NOT published to Play Store.'             --prerelease
+      - name: Verify release listing
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view sura-chat-v0.5.7-staging --repo "$GITHUB_REPOSITORY" --json tagName,isPrerelease,assets,url

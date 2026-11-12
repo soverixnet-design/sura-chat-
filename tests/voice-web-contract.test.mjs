@@ -80,3 +80,21 @@ test('entry JavaScript avoids ES2020 nullish coalescing / optional chaining on o
     assert.ok(!block.includes('?'+'?'),'nullish coalescing breaks older Android WebView');
   }
 });
+
+
+test('Royal room contains owner/admin management backed by protected SURA endpoints',()=>{
+ assert.match(html,/id="roomManageButton"/);
+ assert.match(html,/id="roomManagePanel"/);
+ assert.match(html,/async function loadRoomManage\(openPanel\)/);
+ assert.match(html,/\/manage"/);
+ assert.match(html,/room_moderator_required/);
+ assert.match(html,/my_permission==="owner"/);
+ assert.match(html,/roomSettingsForm/);
+ assert.match(html,/\/settings","POST"/);
+ assert.match(html,/\/moderators","POST"/);
+ assert.match(html,/public_id:id,enabled/);
+ assert.match(html,/\/seats\/"\+number\+"\/"\+action/);
+ assert.match(html,/roomMemberAction/);
+ assert.match(html,/data-act="roomAdminToggle"/);
+ assert.match(html,/protectedUser=isSelf\|\|m.permission==="owner"/);
+});
