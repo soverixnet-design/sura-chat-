@@ -43,7 +43,8 @@ test('SURA login displays a persistent actionable server error and proper form',
  assert.match(html, /account_exists/);
  assert.match(html, /network_unavailable/);
  assert.match(html, /autocomplete="current-password"/);
- assert.match(html, /pattern="\[0-9\]\{8\}"/);
+ assert.match(html, /minlength="10" maxlength="64" autocomplete="new-password"/);
+ assert.match(html, /10–64 characters/);
  assert.match(html, /S\.signup=false/);
  assert.match(html, /typeof r\.token!=="string"/);
 });
