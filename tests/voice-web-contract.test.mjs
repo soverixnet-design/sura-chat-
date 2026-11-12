@@ -70,7 +70,10 @@ test('WebView uses bundled first-party HTTPS asset loader for WebRTC',()=>{
 });
 
 test('entry JavaScript avoids ES2020 nullish coalescing / optional chaining on older WebViews',()=>{
-  const scripts=html.match(/<script>([\\s\\S]*?)<\\/script>/g)||[];
+  const begin=html.indexOf('<script>');
+  const end=html.lastIndexOf('</script>');
+  assert.ok(begin>=0&&end>begin,'inline application script exists');
+  const scripts=[html.slice(begin,end)];
   assert.ok(scripts.length>0);
   for(const block of scripts){
     assert.ok(!block.includes('?'+'.'),'optional chaining breaks older Android WebView');
