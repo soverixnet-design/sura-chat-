@@ -114,11 +114,51 @@ async function currentUser(request, env) {
 
 // Public profiles expose no email, session, wallet or private moderation data.
 async function memberProfile(request, env, publicId) {
-  await currentUser(request, env);
+  const me = await currentUser(request, env);
   const user = await findPublicUser(env, publicId,
-    'u.public_id, u.display_name, u.country_code, u.bio, u.avatar_key');
+    'u.id, u.public_id, u.display_name, u.country_code, u.bio, u.avatar_key');
   if (!user) throw new HttpError(404, 'member_not_found');
-  return json({ user: { ...user, public_id: user.public_id.replace(/^SC(?=\d+$)/, '') } });
+  const blockedByMe = user.id !== me.id && await isUserBlocked(env, me.id, user.id);
+  const { id: _internalUserId, ...publicInfo } = user;
+  return json({ user: { ...publicInfo, public_id: user.public_id.replace(/^SC(?=\d+$)/, ''), blocked_by_me: blockedByMe } });
+}
+
+// Block prevents direct messaging and hides blocked users' posts/messages.
+async function isUserBlocked(env, actorId, peerId) {
+  return Boolean(await env.DB.prepare('SELECT 1 FROM user_blocks WHERE blocker_user_id = ? AND blocked_user_id = ?')
+    .bind(actorId, peerId).first());
+}
+async function usersHaveBlockedEachOther(env, actorId, peerId) {
+  return Boolean(await env.DB.prepare(`SELECT 1 FROM user_blocks WHERE
+    (blocker_user_id = ? AND blocked_user_id = ?) OR (blocker_user_id = ? AND blocked_user_id = ?) LIMIT 1`)
+    .bind(actorId, peerId, peerId, actorId).first());
+}
+async function updateMyBlocks(request, env) {
+  const me = await currentUser(request, env);
+  await rateLimit(request, env, 'room-user-block', me.id);
+  const data = await readJson(request);
+  const id = String(data.public_id || '').trim();
+  if (!publicIdIsSupported(id) || typeof data.blocked !== 'boolean') throw new HttpError(400, 'invalid_block');
+  const target = await findPublicUser(env, id);
+  if (!target) throw new HttpError(404, 'member_not_found');
+  if (target.id === me.id) throw new HttpError(400, 'cannot_block_self');
+  if (data.blocked) {
+    await env.DB.prepare('INSERT OR IGNORE INTO user_blocks (blocker_user_id, blocked_user_id, created_at_ms) VALUES (?, ?, ?)')
+      .bind(me.id, target.id, Date.now()).run();
+  } else {
+    await env.DB.prepare('DELETE FROM user_blocks WHERE blocker_user_id = ? AND blocked_user_id = ?')
+      .bind(me.id, target.id).run();
+  }
+  return json({ success: true, public_id: id.replace(/^SC(?=\\d+$)/, ''), blocked: data.blocked });
+}
+async function listMyBlocks(request, env) {
+  const me = await currentUser(request, env);
+  const { results } = await env.DB.prepare(`SELECT u.public_id, u.display_name, b.created_at_ms
+    FROM user_blocks b JOIN users u ON u.id = b.blocked_user_id
+    WHERE b.blocker_user_id = ? ORDER BY b.created_at_ms DESC LIMIT 100`).bind(me.id).all();
+  return json({ blocked_users: (results || []).map(row => ({
+    ...row, public_id: row.public_id.replace(/^SC(?=\\d+$)/, '')
+  })) });
 }
 
 // Only the two authenticated participants can read their conversation.
@@ -127,6 +167,7 @@ async function directConversation(request, env, publicId, url) {
   const peer = await findPublicUser(env, publicId,
     'u.id, u.public_id, u.display_name, u.avatar_key');
   if (!peer || peer.id === me.id) throw new HttpError(404, 'conversation_not_found');
+  if (await usersHaveBlockedEachOther(env, me.id, peer.id)) throw new HttpError(403, 'conversation_blocked');
   const rawBefore = url.searchParams.get('before');
   const before = rawBefore === null ? Number.MAX_SAFE_INTEGER : Number(rawBefore);
   if (!Number.isSafeInteger(before) || before < 1) throw new HttpError(400, 'invalid_cursor');
@@ -136,7 +177,7 @@ async function directConversation(request, env, publicId, url) {
        (sender_user_id = ? AND recipient_user_id = ?))
     ORDER BY id DESC LIMIT 50`).bind(before, me.id, peer.id, peer.id, me.id).all();
   const rows = results || [];
-  return json({ peer: { public_id: peer.public_id, display_name: peer.display_name, avatar_key: peer.avatar_key },
+  return json({ peer: { public_id: peer.public_id.replace(/^SC(?=\d+$)/, ''), display_name: peer.display_name, avatar_key: peer.avatar_key },
     messages: rows.map(row => ({ id: row.id, body: row.body, created_at_ms: row.created_at_ms,
       mine: row.sender_user_id === me.id })).reverse(),
     next_before: rows.length === 50 ? rows[rows.length - 1].id : null });
@@ -153,9 +194,13 @@ async function directInbox(request, env) {
       m.created_at_ms AS last_created_at_ms, m.sender_user_id = ? AS last_sent_by_me
     FROM peers p JOIN users u ON u.id = p.peer_id
     JOIN direct_messages m ON m.id = p.latest_id
-    WHERE u.status = 'active' ORDER BY m.id DESC`)
-    .bind(me.id, me.id, me.id, me.id).all();
-  return json({ conversations: results || [] });
+    WHERE u.status = 'active' AND NOT EXISTS (
+      SELECT 1 FROM user_blocks b WHERE (b.blocker_user_id = ? AND b.blocked_user_id = u.id)
+      OR (b.blocker_user_id = u.id AND b.blocked_user_id = ?)
+    ) ORDER BY m.id DESC`)
+    .bind(me.id, me.id, me.id, me.id, me.id, me.id).all();
+  return json({ conversations: (results || []).map(row => ({ ...row,
+    public_id: row.public_id.replace(/^SC(?=\d+$)/, '') })) });
 }
 
 async function sendDirectMessage(request, env, publicId) {
@@ -165,6 +210,7 @@ async function sendDirectMessage(request, env, publicId) {
   const peer = await findPublicUser(env, publicId);
   if (!peer) throw new HttpError(404, 'member_not_found');
   if (peer.id === me.id) throw new HttpError(400, 'cannot_message_self');
+  if (await usersHaveBlockedEachOther(env, me.id, peer.id)) throw new HttpError(403, 'conversation_blocked');
   const data = await readJson(request);
   const body = String(data.message ?? '').trim();
   if (!body || body.length > 500 || /[\x00-\x08\x0B\x0C\x0E-\x1F]/.test(body))
@@ -558,12 +604,16 @@ async function activeChatMembership(request, env, roomId) {
 }
 
 async function roomChat(request, env, roomId, after = 0) {
-  const { membership } = await activeChatMembership(request, env, roomId);
+  const { membership, user } = await activeChatMembership(request, env, roomId);
   const { results } = await env.DB.prepare(`SELECT m.id, m.kind, m.body, m.created_at_ms,
     u.public_id AS sender_public_id, u.display_name AS sender_name
     FROM room_messages m LEFT JOIN users u ON u.id = m.sender_user_id
-    WHERE m.room_id = ? AND m.id > ? AND m.id > ? ORDER BY m.id LIMIT 50`)
-    .bind(roomId, after, membership.chat_since_id).all();
+    WHERE m.room_id = ? AND m.id > ? AND m.id > ?
+    AND (m.sender_user_id IS NULL OR NOT EXISTS (SELECT 1 FROM user_blocks b WHERE
+      (b.blocker_user_id = ? AND b.blocked_user_id = m.sender_user_id) OR
+      (b.blocker_user_id = m.sender_user_id AND b.blocked_user_id = ?)))
+    ORDER BY m.id LIMIT 50`)
+    .bind(roomId, after, membership.chat_since_id, user.id, user.id).all();
   return json({ messages: (results ?? []).map(row => ({ ...row,
     sender_public_id: row.sender_public_id?.replace(/^SC(?=\d+$)/, '') ?? null })) });
 }
@@ -590,12 +640,12 @@ async function sendRoomChat(request, env, roomId) {
 // Moments are a durable, user-authored social feed. Never accept a client-supplied
 // author ID; profile names and seven-digit IDs are resolved from the user table.
 async function listMoments(request, env, url) {
-  await currentUser(request, env);
+  const me = await currentUser(request, env);
   const beforeRaw = url.searchParams.get('before');
   const before = beforeRaw === null ? Number.MAX_SAFE_INTEGER : Number(beforeRaw);
   const author = url.searchParams.get('author') || '';
   if (!Number.isSafeInteger(before) || before < 1 ||
-      (author && !/^[0-9]{7}$/.test(author))) throw new HttpError(400, 'invalid_moments_filter');
+      (author && !/^[0-9]{7,8}$/.test(author))) throw new HttpError(400, 'invalid_moments_filter');
   const limit = Math.min(pageSize(url.searchParams.get('limit')), 20);
   let authorId = null;
   if (author) {
@@ -607,7 +657,10 @@ async function listMoments(request, env, url) {
     u.public_id AS author_public_id, u.display_name AS author_name, u.avatar_key AS author_avatar_key
     FROM moments m JOIN users u ON u.id = m.author_user_id
     WHERE m.id < ? AND u.status = 'active' AND (? IS NULL OR m.author_user_id = ?)
-    ORDER BY m.id DESC LIMIT ?`).bind(before, authorId, authorId, limit).all();
+    AND NOT EXISTS (SELECT 1 FROM user_blocks b WHERE
+      (b.blocker_user_id = ? AND b.blocked_user_id = m.author_user_id) OR
+      (b.blocker_user_id = m.author_user_id AND b.blocked_user_id = ?))
+    ORDER BY m.id DESC LIMIT ?`).bind(before, authorId, authorId, me.id, me.id, limit).all();
   const posts = (results || []).map(row => ({ ...row,
     author_public_id: row.author_public_id.replace(/^SC(?=\d+$)/, '') }));
   return json({ moments: posts, next_before: posts.length === limit ? posts[posts.length - 1].id : null });
@@ -815,6 +868,7 @@ export default {
         if (path === '/api/v1/auth/login') return await login(request, env);
         if (path === '/api/v1/me/profile') return await updateMyProfile(request, env);
         if (path === '/api/v1/me/avatar') return await uploadMyAvatar(request, env);
+        if (path === '/api/v1/me/blocks') return await updateMyBlocks(request, env);
         if (path === '/api/v1/auth/logout') {
           await currentUser(request, env);
           await env.DB.prepare('UPDATE auth_sessions SET revoked_at_ms = ? WHERE token_sha256 = ?')
@@ -823,7 +877,7 @@ export default {
         }
         if (path === '/api/v1/rooms') return await createRoom(request, env);
         if (path === '/api/v1/moments') return await createMoment(request, env);
-        const dmPostMatch = /^\/api\/v1\/messages\/([0-9]{7})$/.exec(path);
+        const dmPostMatch = /^\/api\/v1\/messages\/([0-9]{7,8})$/.exec(path);
         if (dmPostMatch) return await sendDirectMessage(request, env, dmPostMatch[1]);
         const chatPostMatch = /^\/api\/v1\/rooms\/([0-9a-f-]{36})\/messages$/i.exec(path);
         if (chatPostMatch) return await sendRoomChat(request, env, chatPostMatch[1]);
@@ -852,6 +906,7 @@ export default {
         return json({ app: 'SURA CHAT', environment: 'staging', status: result?.ok === 1 ? 'ok' : 'degraded', database: result?.ok === 1 ? 'connected' : 'error', media: env.MEDIA ? 'bound' : 'unavailable', voice: voiceConfigured(env) ? 'realtimekit_enabled' : 'realtimekit_config_required', transactions: 'disabled' }, result?.ok === 1 ? 200 : 503);
       }
 
+      if (path === '/api/v1/me/blocks') return await listMyBlocks(request, env);
       if (path === '/api/v1/me') {
         const user = await currentUser(request, env);
         return json({ user: { public_id: user.public_id.replace(/^SC(?=\d+$)/, ''), display_name: user.display_name,
@@ -880,7 +935,7 @@ export default {
       }
       if (path === '/api/v1/moments') return await listMoments(request, env, url);
       if (path === '/api/v1/messages/threads') return await directInbox(request, env);
-      const dmGetMatch = /^\/api\/v1\/messages\/([0-9]{7})$/.exec(path);
+      const dmGetMatch = /^\/api\/v1\/messages\/([0-9]{7,8})$/.exec(path);
       if (dmGetMatch) return await directConversation(request, env, dmGetMatch[1], url);
 
       const manageMatch = /^\/api\/v1\/rooms\/([0-9a-f-]{36})\/manage$/i.exec(path);
