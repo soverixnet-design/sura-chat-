@@ -1,0 +1,37 @@
+name: Publish SURA v0.5.9 Auth and Room Exit TEST APK
+on:
+  push:
+    branches: [feature/sura-auth-room-exit-after-avatar-20261112]
+    paths: ['.github/workflows/sura-auth-room-exit-release.yml']
+permissions:
+  contents: write
+  actions: read
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Require successful source and Android builds
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          test "$(gh run view 43271158352 --repo "$GITHUB_REPOSITORY" --json conclusion --jq '.conclusion')" = success
+          test "$(gh run view 43271158355 --repo "$GITHUB_REPOSITORY" --json conclusion --jq '.conclusion')" = success
+      - name: Retrieve verified Android APK
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p out
+          gh run download 43271158355 --repo "$GITHUB_REPOSITORY" --name sura-chat-debug-unverified --dir out
+          mv out/app-debug.apk out/SURA_CHAT_Royal_3D_v0.5.9_Auth_Room_Exit_Staging.apk
+          printf '%s  %s\n' '5459cbad1c0b272ac9e0d52ef2f324758205adef1a62536f57acd2e70b4047fe' 'out/SURA_CHAT_Royal_3D_v0.5.9_Auth_Room_Exit_Staging.apk' | sha256sum -c -
+      - name: Publish GitHub TEST prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create sura-chat-v0.5.9-staging             'out/SURA_CHAT_Royal_3D_v0.5.9_Auth_Room_Exit_Staging.apk#SURA CHAT Royal 3D Auth and Room Exit TEST APK'             --repo "$GITHUB_REPOSITORY"             --target 'bba299f900b18e27f074b2cac98edf288ec14ef1'             --title 'SURA CHAT 0.5.9 — Login and room exit fixes (TEST APK)'             --notes 'Staging TEST-ONLY APK. Preserves v0.5.8 profile photo sync; fixes stale 401 resetting newer login, room membership left behind on logout, and Android Back handling of room management overlay. Node tests and Android debug build passed. Real phone login, voice and background audio still need QA. Not a Play Store release.'             --prerelease
+      - name: Verify release asset
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view sura-chat-v0.5.9-staging --repo "$GITHUB_REPOSITORY" --json assets,tagName,isPrerelease,url

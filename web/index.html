@@ -247,9 +247,16 @@ nav button b img{display:block;margin:0 auto 2px;filter:drop-shadow(0 2px 3px #0
 
  function toast(msg){let x=E("toast");x.textContent=String(msg);x.style.display="block";clearTimeout(toast.t);toast.t=setTimeout(()=>x.style.display="none",3600);}
  async function api(path,method="GET",payload){
-  const headers={Accept:"application/json"};if(S.token)headers.Authorization="Bearer "+S.token;if(payload!==undefined)headers["Content-Type"]="application/json";
+  const requestToken=S.token;
+  const headers={Accept:"application/json"};if(requestToken)headers.Authorization="Bearer "+requestToken;if(payload!==undefined)headers["Content-Type"]="application/json";
   const c=new AbortController(),timer=setTimeout(()=>c.abort(),15000);
-  try{const r=await fetch(API+path,{method,headers,body:payload===undefined?undefined:JSON.stringify(payload),signal:c.signal,cache:"no-store"});const j=await r.json().catch(()=>({error:"invalid_response"}));if(!r.ok){if(r.status===401&&S.token)showLogin();throw Error(j.error||"HTTP "+r.status);}return j;}
+  try{const r=await fetch(API+path,{method,headers,body:payload===undefined?undefined:JSON.stringify(payload),signal:c.signal,cache:"no-store"});const j=await r.json().catch(()=>({error:"invalid_response"}));if(!r.ok){
+    if(r.status===401&&requestToken&&S.token===requestToken&&
+       (j.error==="session_expired"||j.error==="login_required")){
+      showLogin();showAuthIssue("Session expired. Please sign in again.");
+    }
+    throw Error(j.error||"HTTP "+r.status);
+   }return j;}
   catch(e){throw Error(e.name==="AbortError"?"Connection timeout":e instanceof TypeError?"network_unavailable":e.message);}finally{clearTimeout(timer);}
  }
  function showLogin(){void stopVoice();clearInterval(S.poll);clearInterval(S.heartbeatTimer);S.poll=null;S.heartbeatTimer=null;S.roomGeneration++;S.roomSyncPromise=null;S.roomManage=null;S.roomId="";S.token="";S.user=null;S.signup=false;E("header").hidden=E("main").hidden=E("nav").hidden=true;E("room").hidden=true;E("room").classList.remove("show");E("login").hidden=false;authForm();}
@@ -701,7 +708,12 @@ nav button b img{display:block;margin:0 auto 2px;filter:drop-shadow(0 2px 3px #0
   else if(a==="voice")await joinVoice();
   else if(a==="catalog"){if(S.roomId)void leave("catalog");else go("catalog");}
   else if(a==="openDm")await openDm(el.dataset.id);
-  else if(a==="logout"){await stopVoice();await api("/api/v1/auth/logout","POST",{}).catch(()=>{});showLogin();}
+  else if(a==="logout"){
+   if(S.roomId)await leave(null);
+   await stopVoice();
+   await api("/api/v1/auth/logout","POST",{}).catch(()=>{});
+   showLogin();
+  }
  }catch(err){toast(err.message);}});
  document.addEventListener("submit",async e=>{const form=e.target;if(!form.id)return;e.preventDefault();const d=new FormData(form);const btn=form.querySelector("button[type=submit],button.gold");if(btn)btn.disabled=true;
   try{
@@ -715,7 +727,15 @@ nav button b img{display:block;margin:0 auto 2px;filter:drop-shadow(0 2px 3px #0
    else if(form.id==="editProfile"){const r=await api("/api/v1/me/profile","POST",{display_name:String(d.get("display_name")).trim(),bio:String(d.get("bio")).trim()});S.user={...S.user,...r.user};toast("Saved");render();}
   }catch(err){if(form.id==="authForm")showAuthIssue(authMessage(err,S.signup));else toast(err.message);}finally{if(btn){btn.disabled=false;if(form.id==="authForm")btn.textContent=S.signup?"Create Account":"Sign In";}}
  });
- window.suraBack=function(){if(S.roomId){void leave();return true;}if(S.tab!=="home"){go("home");return true;}return false;};
+ window.suraBack=function(){
+  if(S.roomId){
+   if(!E("roomManagePanel").hidden){E("roomManagePanel").hidden=true;return true;}
+   void leave();return true;
+  }
+  if(!E("login").hidden)return false;
+  if(S.tab!=="home"){go("home");return true;}
+  return false;
+ };
  document.addEventListener("visibilitychange",()=>{if(document.hidden){clearInterval(S.poll);clearInterval(S.heartbeatTimer);S.poll=null;S.heartbeatTimer=null;}else if(S.roomId&&!S.poll){heartbeat();S.poll=setInterval(()=>syncRoom().catch(()=>{}),4000);if(!S.heartbeatUnsupported)S.heartbeatTimer=setInterval(heartbeat,25000);}});
  showLogin();
 })();</script></body></html>

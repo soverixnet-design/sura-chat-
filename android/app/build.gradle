@@ -8,8 +8,8 @@ android {
         minSdk 26
         targetSdk 35
         testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
-        versionCode 13
-        versionName '0.5.8-avatar-sync-staging'
+        versionCode 14
+        versionName '0.5.9-auth-room-exit-staging'
     }
     buildTypes {
         debug {

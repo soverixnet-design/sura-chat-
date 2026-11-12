@@ -96,3 +96,18 @@ test('SURA profile photo uses real R2 WebP endpoint and in-room seat avatar upda
  assert.match(java, /mime\.startsWith\("image\/"\)/);
  assert.doesNotMatch(java, /ACTION_GET_MULTIPLE_CONTENTS/);
 });
+
+
+test('late 401 from previous bearer cannot clear a new SURA session',()=>{
+ assert.match(html,/const requestToken=S\.token/);
+ assert.match(html,/r\.status===401&&requestToken&&S\.token===requestToken/);
+ assert.match(html,/j\.error==="session_expired"\|\|j\.error==="login_required"/);
+});
+test('logout leaves room before revoking bearer',()=>{
+ assert.match(html,/if\(S\.roomId\)await leave\(null\)/);
+ assert.match(html,/await api\("\/api\/v1\/auth\/logout","POST",\{\}\)/);
+});
+test('Android back closes management panel before room and exits login activity',()=>{
+ assert.match(html,/if\(!E\("roomManagePanel"\)\.hidden\)\{E\("roomManagePanel"\)\.hidden=true;return true;\}/);
+ assert.match(html,/if\(!E\("login"\)\.hidden\)return false/);
+});
