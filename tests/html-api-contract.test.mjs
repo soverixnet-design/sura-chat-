@@ -238,3 +238,14 @@ test('member safety is accessible on actual member profiles and room chat', () =
   assert.match(html, /className="chat-member-name"/);
   assert.match(html, /async function openDm\(id\)\{if\(!\/\^\\d\{7,8\}\$\//);
 });
+
+test('rooms search across SURA server and profile country is editable',()=>{
+  assert.match(html, /limit:tab==="home"\?"5":"50"/);
+  assert.match(html, /filters\.set\("q",S\.roomSearch\.trim\(\)\)/);
+  assert.match(html, /q:query/);
+  assert.match(html, /setTimeout\(async\(\)=>\{/);
+  assert.match(html, /roomSearchSeq/);
+  assert.match(html, /Search all live rooms/);
+  assert.match(html, /name="country_code"/);
+  assert.match(html, /country_code:String\(d\.get\("country_code"\)\|\|""\)\.trim\(\)\.toUpperCase\(\)/);
+});
