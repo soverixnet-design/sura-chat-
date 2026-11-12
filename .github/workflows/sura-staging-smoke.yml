@@ -27,9 +27,10 @@ jobs:
 
           BASE = os.environ['SURA_API_URL'].rstrip('/')
 
-          def check(path, method='GET'):
+          def check(path, method='GET', body=None):
               req = urllib.request.Request(
                   BASE + path, method=method,
+                  data=json.dumps(body).encode('utf-8') if body is not None else None,
                   headers={'Accept': 'application/json',
                            'Content-Type': 'application/json',
                            'User-Agent': 'sura-chat-staging-ci-smoke'}
@@ -81,6 +82,16 @@ jobs:
           status, data = check('/api/v1/reports', method='POST')
           assert status == 401 and data.get('error') == 'login_required', (status, data)
           print('OK member safety endpoints reject anonymous access')
+
+          status, data = check('/api/v1/auth/change-password', 'POST', {
+              'current_password': '00000000', 'new_password': 'AComplexExample2026'
+          })
+          assert status == 401 and data.get('error') == 'login_required', (status, data)
+          status, data = check('/api/v1/auth/revoke-other-sessions', 'POST', {
+              'current_password': '00000000'
+          })
+          assert status == 401 and data.get('error') == 'login_required', (status, data)
+          print('OK password and other-device protection reject anonymous use')
 
           status, data = check('/api/v1/me/reports')
           assert status == 401 and data.get('error') == 'login_required', (status, data)
