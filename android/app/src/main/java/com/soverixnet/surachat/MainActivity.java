@@ -408,67 +408,48 @@ public final class MainActivity extends Activity {
     }
 
     private void showRooms(String scope, String sort) {
-        LinearLayout p = shell("Rooms");
-        LinearLayout filters = new LinearLayout(this);
+        LinearLayout p=shell("Rooms");
+        hero(p,"LIVE COMMUNITY","Explore rooms",
+             "Popular rooms · New friends · Global voices",
+             "sura_voice_support",null);
+        p.addView(goldAction("✧ Create your own room",v -> showCreate()));
+        LinearLayout filters=new LinearLayout(this);
         filters.setOrientation(LinearLayout.HORIZONTAL);
-        String[] names = {"Popular", "New", "My", "History"};
-        String[] scopes = {"all", "all", "mine", "history"};
-        String[] sorts = {"popular", "new", "new", "new"};
-        for (int i = 0; i < names.length; i++) {
-            final int x = i;
-            Button b = button(names[i], v -> showRooms(scopes[x], sorts[x]));
+        String[] names={"Popular","New","My","History"};
+        String[] scopes={"all","all","mine","history"};
+        String[] sorts={"popular","new","new","new"};
+        for(int i=0;i<names.length;i++){
+            final int x=i;
+            Button b=button(names[i],v -> showRooms(scopes[x],sorts[x]));
             b.setTextSize(11);
-            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, dp(45), 1);
-            lp.setMargins(dp(1), dp(4), dp(1), dp(4));
-            filters.addView(b, lp);
+            if(scope.equals(scopes[i]) && sort.equals(sorts[i]) && (i<2 || (i==2&&scope.equals("mine")) || (i==3&&scope.equals("history")))) {
+                b.setBackground(RoyalTheme.goldButton(this));b.setTextColor(BG);
+            }
+            LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(0,dp(45),1);
+            lp.setMargins(dp(2),dp(4),dp(2),dp(4));
+            filters.addView(b,lp);
         }
         p.addView(filters);
-        TextView state = text("Fetching rooms…", 13, MUTED);
-        p.addView(state);
-        String url = "/api/v1/rooms?scope=" + scope + "&sort=" + sort
-                + "&home_country=" + country + "&limit=30";
-        api.get(url, (status, body) -> {
-            if (status != 200) { state.setText("Could not load rooms."); error(status, body); return; }
-            state.setText("");
-            JSONArray rooms = body.optJSONArray("rooms");
-            if (rooms == null || rooms.length() == 0) { state.setText("No rooms found. Create one!"); return; }
-            for (int i = 0; i < rooms.length(); i++) {
-                JSONObject room = rooms.optJSONObject(i);
-                if (room == null) continue;
-                String id = room.optString("id");
-                String name = room.optString("name", "Voice room");
-                String roomCountry = room.optString("country_code", "Global");
-                LinearLayout tile = new LinearLayout(this);
-                tile.setOrientation(LinearLayout.HORIZONTAL);
-                tile.setGravity(android.view.Gravity.CENTER_VERTICAL);
-                tile.setPadding(dp(13), dp(12), dp(12), dp(12));
-                GradientDrawable bg = new GradientDrawable(GradientDrawable.Orientation.TL_BR,
-                        new int[]{Color.rgb(49, 32, 75), Color.rgb(28, 24, 63)});
-                bg.setCornerRadius(dp(18));
-                bg.setStroke(dp(1), Color.rgb(137, 106, 163));
-                tile.setBackground(bg);
-                tile.setElevation(dp(3));
-                LinearLayout.LayoutParams card = new LinearLayout.LayoutParams(-1, dp(90));
-                card.setMargins(dp(3), dp(6), dp(3), dp(6));
-                View crest = RoyalIcons.view(this, "sura_voice_support", 55, "✦");
-                crest.setBackground(bgForCrest());
-                tile.addView(crest, new LinearLayout.LayoutParams(dp(55), dp(55)));
-                LinearLayout words = new LinearLayout(this);
-                words.setOrientation(LinearLayout.VERTICAL);
-                words.setPadding(dp(11), 0, 0, 0);
-                TextView title = text(name, 16, Color.WHITE);
-                title.setTypeface(null, Typeface.BOLD);
-                title.setSingleLine(true);
-                title.setEllipsize(android.text.TextUtils.TruncateAt.END);
-                words.addView(title);
-                words.addView(text((roomCountry.equals("null") ? "Global" : roomCountry)
-                        + "  ·  " + room.optInt("active_count", 0) + " members", 11, MUTED));
-                tile.addView(words, new LinearLayout.LayoutParams(0, -2, 1));
-                TextView enter = text("›", 30, GOLD);
-                enter.setGravity(android.view.Gravity.CENTER);
-                tile.addView(enter, new LinearLayout.LayoutParams(dp(32), -1));
-                tile.setOnClickListener(v -> joinRoom(id, name, roomCountry));
-                p.addView(tile, card);
+        RoyalTheme.displaySection(p,this,"Voice Rooms","Tap a room to enter");
+        LinearLayout list=new LinearLayout(this);
+        list.setOrientation(LinearLayout.VERTICAL);
+        list.addView(RoyalTheme.text(this,"Loading rooms…",13,MUTED,false));
+        p.addView(list);
+        api.get("/api/v1/rooms?scope="+scope+"&sort="+sort+"&home_country="+country+"&limit=30",(status,json)->{
+            if(isFinishing()||isDestroyed()||list.getParent()==null)return;
+            list.removeAllViews();
+            if(status!=200){
+                list.addView(RoyalTheme.text(this,"Unable to load rooms. Check your connection.",13,MUTED,false));
+                error(status,json);return;
+            }
+            JSONArray rooms=json.optJSONArray("rooms");
+            if(rooms==null||rooms.length()==0){
+                list.addView(RoyalTheme.text(this,"No rooms found.",13,MUTED,false));
+                return;
+            }
+            for(int i=0;i<rooms.length();i++) {
+                JSONObject room=rooms.optJSONObject(i);
+                if(room!=null)list.addView(roomTile(room));
             }
         });
     }
@@ -545,58 +526,225 @@ public final class MainActivity extends Activity {
     }
 
     private void showMessages() {
-        LinearLayout p = shell("Messages");
-        p.addView(featureCard("Private Chat", "One-to-one conversations", "sura_messages", null));
-        TextView list = text("Loading private conversations…", 14, MUTED);
+        LinearLayout p=shell("Messages");
+        hero(p,"PRIVATE CONVERSATIONS","Messages","Stay connected with your community",
+             "sura_messages",null);
+        EditText search=field(p,"Search conversations",InputType.TYPE_CLASS_TEXT,"");
+        RoyalTheme.displaySection(p,this,"Recent Chats","Messages from your account");
+        LinearLayout list=new LinearLayout(this);
+        list.setOrientation(LinearLayout.VERTICAL);
         p.addView(list);
-        api.get("/api/v1/messages/threads", (code, json) -> {
-            if (code != 200) { error(code, json); return; }
-            JSONArray chats = json.optJSONArray("conversations");
-            if (chats == null || chats.length() == 0) { list.setText("No conversations yet."); return; }
-            StringBuilder text = new StringBuilder();
-            for (int i = 0; i < chats.length(); i++) {
-                JSONObject item = chats.optJSONObject(i);
-                if (item != null) text.append(item.optString("display_name", "User"))
-                    .append(": ").append(item.optString("last_message", "")).append("\n\n");
-            }
-            list.setText(text.toString());
+        list.addView(RoyalTheme.text(this,"Loading conversations…",13,MUTED,false));
+        api.get("/api/v1/messages/threads",(code,json)->{
+            if(isFinishing()||isDestroyed()||list.getParent()==null)return;
+            if(code!=200){list.removeAllViews();notice(list,"Could not load messages",
+                        json.optString("error","Please try again."));return;}
+            JSONArray chats=json.optJSONArray("conversations");
+            Runnable render=()->{
+                list.removeAllViews();
+                if(chats==null||chats.length()==0){
+                    notice(list,"No conversations yet","Open a user's profile in a room to send a private message.");
+                    return;
+                }
+                String query=typed(search).toLowerCase(java.util.Locale.ROOT);
+                int found=0;
+                for(int i=0;i<chats.length();i++){
+                    JSONObject item=chats.optJSONObject(i);
+                    if(item==null)continue;
+                    String label=item.optString("display_name","Member");
+                    String id=item.optString("public_id","");
+                    if(!label.toLowerCase(java.util.Locale.ROOT).contains(query) && !id.contains(query))continue;
+                    String preview=item.optString("last_message","");
+                    if(preview.length()>110)preview=preview.substring(0,110)+"…";
+                    list.addView(featureCard(label+" · "+id,preview,"sura_messages",
+                        v -> showConversation(id,label)));
+                    found++;
+                }
+                if(found==0)list.addView(RoyalTheme.text(this,"No matching conversations.",13,MUTED,false));
+            };
+            render.run();
+            search.addTextChangedListener(new TextWatcher() {
+                @Override public void beforeTextChanged(CharSequence s,int start,int count,int after){}
+                @Override public void onTextChanged(CharSequence s,int start,int before,int count){render.run();}
+                @Override public void afterTextChanged(Editable e){}
+            });
         });
     }
 
-    private void showMe() {
-        LinearLayout p = shell("My profile");
-        TextView profile = text("Loading…", 15, GOLD);
-        p.addView(profile);
-        EditText name = field(p, "Display name", InputType.TYPE_CLASS_TEXT, "");
-        EditText bio = field(p, "Bio", InputType.TYPE_CLASS_TEXT, "");
-        api.get("/api/v1/me", (code, json) -> {
-            if (code != 200) { error(code, json); return; }
-            JSONObject me = json.optJSONObject("user");
-            if (me != null) {
-                publicId = me.optString("public_id");
-                profile.setText("SURA ID: " + publicId + " · " + me.optString("country_code", "Global"));
-                name.setText(me.optString("display_name", ""));
-                bio.setText(me.optString("bio", ""));
+    private void showConversation(String targetId,String targetName) {
+        if(!targetId.matches("[0-9]{7}")){notifyUser("Invalid member ID");return;}
+        LinearLayout p=shell("Messages");
+        p.addView(goldAction("‹ All messages",v -> showMessages()));
+        hero(p,"PRIVATE CHAT",targetName,"Only conversation participants can see these messages.",
+            "sura_messages",null);
+        LinearLayout messages=new LinearLayout(this);
+        messages.setOrientation(LinearLayout.VERTICAL);
+        p.addView(messages);
+        EditText input=field(p,"Write your message…",InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_MULTI_LINE,"");
+        input.setSingleLine(false);
+        input.setMaxLines(4);
+        p.addView(goldAction("Send message",v -> {
+            String message=typed(input);
+            if(message.isEmpty()||message.length()>500){notifyUser("Message must be 1–500 characters");return;}
+            try{
+                api.post("/api/v1/messages/"+targetId,new JSONObject().put("message",message),(code,json)->{
+                    if(code==201){input.setText("");showConversation(targetId,targetName);}
+                    else error(code,json);
+                });
+            }catch(Exception ignored){notifyUser("Unable to send message");}
+        }));
+        api.get("/api/v1/messages/"+targetId,(code,json)->{
+            if(isFinishing()||isDestroyed()||messages.getParent()==null)return;
+            messages.removeAllViews();
+            if(code!=200){notice(messages,"Conversation unavailable","Please try again.");return;}
+            JSONArray rows=json.optJSONArray("messages");
+            if(rows==null||rows.length()==0){
+                messages.addView(RoyalTheme.text(this,"No messages yet.",13,MUTED,false));return;
+            }
+            for(int i=0;i<rows.length();i++){
+                JSONObject item=rows.optJSONObject(i);
+                if(item==null)continue;
+                LinearLayout bubble=RoyalTheme.framed(this);
+                bubble.addView(RoyalTheme.text(this,item.optBoolean("mine")?"You":targetName,
+                    11,GOLD,true));
+                bubble.addView(RoyalTheme.text(this,item.optString("body",""),14,WHITE,false));
+                messages.addView(bubble,RoyalTheme.margins(this,-2,0,4,4));
             }
         });
-        p.addView(button("Save profile", v -> {
+    }
+
+    private void showMoments() {
+        LinearLayout p=shell("Moments");
+        hero(p,"SHARE YOUR STORY","Community Moments",
+             "A place for thoughts, updates and good vibes",
+             "sura_community",null);
+        LinearLayout composer=RoyalTheme.framed(this);
+        EditText entry=field(composer,"Share a moment (up to 500 characters)",InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_MULTI_LINE,"");
+        entry.setSingleLine(false);
+        entry.setMaxLines(5);
+        composer.addView(goldAction("✦ Post Moment",v -> {
+            String content=typed(entry);
+            if(content.isEmpty()||content.length()>500){notifyUser("Write 1–500 characters");return;}
             try {
-                JSONObject request = new JSONObject().put("display_name", typed(name)).put("bio", typed(bio));
-                api.post("/api/v1/me/profile", request, (code, json) -> {
-                    if (code == 200) notifyUser("Profile saved"); else error(code, json);
+                api.post("/api/v1/moments",new JSONObject().put("body",content),(code,json)->{
+                    if(code==201)showMoments(); else error(code,json);
                 });
-            } catch (Exception ignored) { }
+            } catch(Exception ignored){notifyUser("Unable to create moment");}
         }));
-        p.addView(featureCard("Special ID · Preview", "Royal profile ID design", "sura_special_id", null));
-        p.addView(featureCard("VIP · Preview", "VIP decoration only", "sura_vip", null));
-        p.addView(featureCard("Coin Wallet · Preview", "Coin transactions are disabled", "sura_coin_rewards", null));
-        p.addView(featureCard("Diamond Wallet · Preview", "Diamonds are not yet enabled", "sura_diamond_wallet", null));
-        p.addView(featureCard("Recharge · Preview", "Purchases are not yet enabled", "sura_recharge", null));
-        p.addView(button("Sign out", v -> api.post("/api/v1/auth/logout", new JSONObject(), (code, body) -> {
-            api.setSession("");
-            country = "";
-            publicId = "";
-            showAuth(false);
+        p.addView(composer,RoyalTheme.margins(this,-2,0,5,7));
+        RoyalTheme.displaySection(p,this,"Latest Moments","Real updates from members");
+        LinearLayout list=new LinearLayout(this);
+        list.setOrientation(LinearLayout.VERTICAL);
+        list.addView(RoyalTheme.text(this,"Loading…",13,MUTED,false));
+        p.addView(list);
+        api.get("/api/v1/moments?limit=20",(code,json)->{
+            if(isFinishing()||isDestroyed()||list.getParent()==null)return;
+            list.removeAllViews();
+            if(code!=200){notice(list,"Moments unavailable","Could not load community updates.");return;}
+            JSONArray moments=json.optJSONArray("moments");
+            if(moments==null||moments.length()==0){notice(list,"No moments yet","Be the first to share a moment.");return;}
+            for(int i=0;i<moments.length();i++){
+                JSONObject moment=moments.optJSONObject(i);
+                if(moment==null)continue;
+                LinearLayout post=RoyalTheme.framed(this);
+                post.addView(RoyalTheme.text(this,"✦ "+moment.optString("author_name","Member"),15,GOLD,true));
+                post.addView(RoyalTheme.text(this,moment.optString("body",""),14,WHITE,false));
+                post.addView(RoyalTheme.text(this,"SURA ID: "+moment.optString("author_public_id",""),11,MUTED,false));
+                list.addView(post,RoyalTheme.margins(this,-2,0,5,7));
+            }
+        });
+    }
+
+    private void showEvents() {
+        LinearLayout p=shell("Events");
+        hero(p,"ROYAL EVENTS","Event Center",
+             "Discover campaigns, celebrations and bonuses",
+             "sura_diamond_gift",null);
+        notice(p,"Events are being prepared",
+            "This staging build has no active event publishing backend. The cards below are design previews, not available offers.");
+        RoyalTheme.displaySection(p,this,"Event categories","Previews only");
+        p.addView(featureCard("Recharge Bonus · Coming Soon",
+              "Bonus campaigns will appear after approved payment integration",
+              "sura_recharge",null));
+        p.addView(featureCard("Weekly Gift Event · Coming Soon",
+              "Rewards and event targets are not live yet",
+              "sura_diamond_gift",null));
+        p.addView(featureCard("Official Manager Recruitment · Coming Soon",
+              "Application and approval workflow pending",
+              "sura_special_id",null));
+        p.addView(featureCard("Lucky Box · Coming Soon",
+              "Server-authorized rewards only when available",
+              "sura_coin_rewards",null));
+    }
+
+    private void showRanking() {
+        LinearLayout p=shell("Rankings");
+        hero(p,"ROYAL COMPETITION","Rankings",
+              "Daily · Weekly · Monthly · Hosts · Rooms",
+              "sura_vip",null);
+        notice(p,"Leaderboards are not live yet",
+              "The staging API does not yet serve verified ranking data. No scores or winners are fabricated.");
+        p.addView(featureCard("Top Hosts · Coming Soon",
+            "A live leaderboard will appear after server integration",
+            "sura_vip",null));
+        p.addView(featureCard("Room Rankings · Coming Soon",
+            "Based on server-verified participation",
+            "sura_voice_support",null));
+        p.addView(featureCard("Ranking Rewards · Coming Soon",
+            "Rewards must be earned and recorded by the backend",
+            "sura_diamond_gift",null));
+    }
+
+    private void showMe() {
+        LinearLayout p=shell("My profile");
+        hero(p,"YOUR ROYAL IDENTITY","My Profile",
+             "Manage your account and share your story",
+             "sura_special_id",null);
+        LinearLayout header=RoyalTheme.framed(this);
+        TextView profile=RoyalTheme.text(this,"Loading profile…",18,GOLD,true);
+        header.addView(profile);
+        TextView bioLabel=RoyalTheme.text(this,"",13,MUTED,false);
+        header.addView(bioLabel);
+        p.addView(header,RoyalTheme.margins(this,-2,0,5,7));
+        RoyalTheme.displaySection(p,this,"Edit your profile","Your changes are saved to your account");
+        EditText name=field(p,"Display name",InputType.TYPE_CLASS_TEXT,"");
+        EditText bio=field(p,"Bio",InputType.TYPE_CLASS_TEXT,"");
+        api.get("/api/v1/me",(code,json)->{
+            if(isFinishing()||isDestroyed()||profile.getParent()==null)return;
+            if(code!=200){error(code,json);return;}
+            JSONObject me=json.optJSONObject("user");
+            if(me!=null){
+                publicId=me.optString("public_id","");
+                String display=me.optString("display_name","Member");
+                profile.setText("♛ "+display+" · ID "+publicId);
+                bioLabel.setText("Country: "+me.optString("country_code","Global"));
+                name.setText(display);
+                bio.setText(me.optString("bio",""));
+            }
+        });
+        p.addView(goldAction("✎ Save Profile",v -> {
+            try{
+                JSONObject request=new JSONObject().put("display_name",typed(name)).put("bio",typed(bio));
+                api.post("/api/v1/me/profile",request,(code,json)->{
+                    if(code==200) {notifyUser("Profile saved");showMe();}
+                    else error(code,json);
+                });
+            } catch(Exception ignored){notifyUser("Could not save profile");}
+        }));
+        RoyalTheme.displaySection(p,this,"Royal Collections","Design preview · not active yet");
+        p.addView(featureCard("VIP & Special ID · Preview",
+                "Future profile status decorations","sura_vip",null));
+        p.addView(featureCard("Frames & Nobles · Preview",
+                "Profile decorations are not available to purchase",
+                "sura_special_id",null));
+        p.addView(featureCard("Coin Wallet · Preview",
+                "Purchases and transfers are disabled","sura_coin_rewards",null));
+        p.addView(featureCard("Diamond Wallet · Preview",
+                "Diamond transactions are disabled","sura_diamond_wallet",null));
+        p.addView(featureCard("My Moments","View community posts",
+                "sura_community",v -> showMoments()));
+        p.addView(button("Sign out",v -> api.post("/api/v1/auth/logout",new JSONObject(),(code,json)->{
+            api.setSession("");country="";publicId="";showAuth(false);
         })));
     }
 
