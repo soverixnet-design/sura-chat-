@@ -226,3 +226,15 @@ test('Moments, inbox and DM show real member profiles without fictional user dat
   assert.match(html, /form\.id==="findMember"\)await openMemberProfile/);
   assert.match(html, /await api\("\/api\/v1\/users\/"\+encodeURIComponent\(id\)\)/);
 });
+
+test('member safety is accessible on actual member profiles and room chat', () => {
+  assert.match(html, /data-act="memberBlock"/);
+  assert.match(html, /data-act="memberReport"/);
+  assert.match(html, /id="memberReportForm"/);
+  assert.match(html, /form\.id==="memberReportForm"/);
+  assert.match(html, /\/api\/v1\/me\/blocks/);
+  assert.match(html, /\/api\/v1\/reports/);
+  assert.match(html, /context_type:"profile"/);
+  assert.match(html, /className="chat-member-name"/);
+  assert.match(html, /async function openDm\(id\)\{if\(!\/\^\\d\{7,8\}\$\//);
+});
