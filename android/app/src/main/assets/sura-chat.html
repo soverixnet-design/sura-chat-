@@ -406,16 +406,21 @@ html,body{height:100%;width:100%;min-height:0;overflow:hidden}
  const E=id=>document.getElementById(id);
  const safe=v=>String(v==null?"":v).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
  const fmt=v=>Number(v||0).toLocaleString("en-US");
+ function canonicalMemberId(value){
+  const raw=String(value||"");
+  const id=raw.startsWith("SC")?raw.slice(2):raw;
+  return /^[0-9]{7,8}$/.test(id)?id:"";
+ }
  function avatarUrl(user){
-  const id=String(user&&user.public_id||"");
-  if(!/^(?:[0-9]{7,8}|SC[0-9]{8})$/.test(id)||!user.avatar_key)return "";
+  const id=canonicalMemberId(user&&user.public_id);
+  if(!id||!user.avatar_key)return "";
   return API+"/api/v1/users/"+encodeURIComponent(id)+"/avatar?v="+encodeURIComponent(user.avatar_key);
  }
  function avatarHtml(user){const src=avatarUrl(user);return src?'<img alt="" loading="lazy" src="'+safe(src)+'" onerror="this.replaceWith(document.createTextNode(\'👤\'))">':'👤';}
  function refreshHeaderAvatar(){const host=E("headerAvatar");if(host)host.innerHTML=avatarHtml(S.user);}
  function closeMemberProfile(){S.memberProfileId="";E("memberProfileSheet").hidden=true;}
  async function openMemberProfile(publicId){
-  const id=String(publicId||"");if(!/^[0-9]{7,8}$/.test(id))return toast("Invalid member ID");
+  const id=canonicalMemberId(publicId);if(!id)return toast("Invalid member ID");
   const sheet=E("memberProfileSheet"),body=E("memberProfileBody");S.memberProfileId=id;sheet.hidden=false;
   body.innerHTML='<div class="h"><b>Member Profile</b><button type="button" class="btn" data-act="closeMemberProfile">✕</button></div><p>Loading member profile…</p>';
   try{
@@ -692,6 +697,17 @@ if(S.tab==="home")x.innerHTML=
    voiceStatus("Join Voice");voiceNet("Audio off");
    if(meeting)try{await meeting.leave();}catch(error){console.warn("RealtimeKit leave failed",(error && error.message));}
  }
+ async function resetFailedVoice(liveMeeting, roomId, generation, kind){
+  if(S.voice.meeting!==liveMeeting||S.voice.roomId!==roomId||
+     S.roomId!==roomId||S.voice.generation!==generation)return;
+  // Clear the dead SDK session so Retry Voice issues a fresh server token.
+  // Do not interrupt an ordinary 'disconnected'/'reconnecting' transient.
+  await stopVoice();
+  if(S.roomId!==roomId||S.voice.generation!==generation+1)return;
+  voiceStatus("Retry Voice");
+  voiceNet("Voice "+kind+" failed · tap Retry Voice");
+  toast("Voice connection failed. Tap Retry Voice.");
+ }
  async function joinVoice(){
    const roomId=S.roomId;
    if(!roomId||S.voice.busy)return;
@@ -744,6 +760,16 @@ if(S.tab==="home")x.innerHTML=
          if(!["new","connecting","connected","disconnected","reconnecting","failed"].includes(state))return;
          transports[transport]=state;
          if(S.voice.meeting===liveMeeting&&S.voice.roomId===roomId)showVoiceTransports(transports);
+         if(state==="failed"&&(transport==="consuming"||
+           (transport==="producing"&&liveMeeting.self&&liveMeeting.self.audioEnabled))){
+           void resetFailedVoice(liveMeeting,roomId,currentGeneration,transport);
+         }
+       });
+     }
+     if(typeof (liveMeeting.meta && liveMeeting.meta.on)==="function"){
+       liveMeeting.meta.on("socketConnectionUpdate",({state})=>{
+         if(state==="failed")
+           void resetFailedVoice(liveMeeting,roomId,currentGeneration,"signaling");
        });
      }
      if(typeof (liveMeeting.self && liveMeeting.self.on)==="function"){
