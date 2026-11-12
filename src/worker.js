@@ -869,6 +869,10 @@ async function createMoment(request, env) {
 
 async function listRooms(request, env, url) {
   const limit = pageSize(url.searchParams.get('limit'));
+  const offsetText = url.searchParams.get('offset');
+  const offset = offsetText === null ? 0 : Number(offsetText);
+  if (offsetText !== null && (!/^(0|[1-9]\d{0,3})$/.test(offsetText) || offset > 5000))
+    throw new HttpError(400, 'invalid_room_offset');
   const scope = url.searchParams.get('scope') || 'all';
   const country = url.searchParams.get('country')?.toUpperCase() || '';
   const homeCountry = url.searchParams.get('home_country')?.toUpperCase() || '';
@@ -890,9 +894,12 @@ async function listRooms(request, env, url) {
     AND (? = '' OR r.country_code = ?)
     AND (? = '' OR instr(lower(r.name), lower(?)) > 0)
     ORDER BY CASE WHEN r.country_code = ? THEN 0 ELSE 1 END,
-      ${sort === 'popular' ? 'active_count DESC,' : ''} r.created_at DESC LIMIT ?`)
-    .bind(...(user ? [user.id] : []), country, country, search, search, homeCountry, limit).all();
-  return json({ rooms: rows.results ?? [], count: rows.results?.length ?? 0 });
+      ${sort === 'popular' ? 'active_count DESC,' : ''} r.created_at DESC, r.id DESC LIMIT ? OFFSET ?`)
+    .bind(...(user ? [user.id] : []), country, country, search, search, homeCountry, limit + 1, offset).all();
+  const fetched = rows.results ?? [];
+  const hasMore = fetched.length > limit;
+  const rooms = fetched.slice(0, limit);
+  return json({ rooms, count: rooms.length, has_more: hasMore, next_offset: hasMore ? offset + limit : null });
 }
 
 /**
