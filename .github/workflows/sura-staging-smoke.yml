@@ -1,0 +1,70 @@
+name: SURA staging API HTTP smoke
+on:
+  push:
+    branches:
+      - 'feature/sura-presence-heartbeat-20261112'
+    paths:
+      - '.github/workflows/sura-staging-smoke.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  api-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Verify staging database, HTTP routing and anonymous permissions
+        env:
+          SURA_API_URL: https://sura-chat-api-staging.soverixnet.workers.dev
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          import time
+          import urllib.request
+          import urllib.error
+
+          BASE = os.environ['SURA_API_URL'].rstrip('/')
+
+          def check(path, method='GET'):
+              req = urllib.request.Request(
+                  BASE + path, method=method,
+                  headers={'Accept': 'application/json',
+                           'Content-Type': 'application/json',
+                           'User-Agent': 'sura-chat-staging-ci-smoke'}
+              )
+              for attempt in range(3):
+                  try:
+                      with urllib.request.urlopen(req, timeout=12) as response:
+                          return response.status, json.loads(response.read())
+                  except urllib.error.HTTPError as exc:
+                      return exc.code, json.loads(exc.read())
+                  except (urllib.error.URLError, TimeoutError):
+                      if attempt == 2:
+                          raise
+                      time.sleep(3)
+
+          status, data = check('/health')
+          assert status == 200, ('/health', status, data)
+          assert data.get('app') == 'SURA CHAT', data
+          assert data.get('database') == 'connected', data
+          print('OK health: dedicated SURA staging DB connected')
+
+          status, data = check('/api/v1/config')
+          assert status == 200, ('/api/v1/config', status, data)
+          assert data.get('app') == 'SURA CHAT', data
+          print('OK config: real SURA API available')
+
+          status, data = check('/api/v1/rooms')
+          assert status == 200 and isinstance(data.get('rooms'), list), (status, data)
+          print('OK rooms: real API returns data, count=', data.get('count'))
+
+          status, data = check('/api/v1/me')
+          assert status == 401 and data.get('error') == 'login_required', (status, data)
+          print('OK protected profile rejects anonymous access')
+
+          room_id = '00000000-0000-4000-8000-000000000001'
+          status, data = check('/api/v1/rooms/' + room_id + '/heartbeat', method='POST')
+          assert status == 401 and data.get('error') == 'login_required', (status, data)
+          print('OK new heartbeat route rejects unauthenticated writes')
+          PY

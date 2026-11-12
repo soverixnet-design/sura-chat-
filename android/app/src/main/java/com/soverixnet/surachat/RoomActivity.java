@@ -74,6 +74,7 @@ public final class RoomActivity extends Activity {
     private boolean chatFetch = false;
     private boolean resumed = false;
     private boolean leaving = false;
+    private int presenceTick = 0;
     private TextView headerName, announcement, seatStatus, chatHistory, liveLabel;
     private ScrollView chatScroll;
     private EditText chatInput;
@@ -84,6 +85,13 @@ public final class RoomActivity extends Activity {
             if (!resumed || leaving) return;
             refreshSeats();
             refreshMessages();
+            // Backward compatible: legacy Worker may return 404 until deployed.
+            if ((++presenceTick % 6) == 1) api.post("/api/v1/rooms/" + roomId + "/heartbeat", new JSONObject(), (status, body) -> {
+                if (status == 403 && "join_room_first".equals(body.optString("error"))) {
+                    Toast.makeText(RoomActivity.this, "Room session expired. Rejoin.", Toast.LENGTH_SHORT).show();
+                    finish();
+                }
+            });
             ui.postDelayed(this, 4500);
         }
     };

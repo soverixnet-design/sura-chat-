@@ -17,6 +17,9 @@ const HEADERS = {
 // This is a staging credential format; production should migrate to Argon2id.
 const PASSWORD_ITERATIONS = 100000;
 const SESSION_LIFETIME_MS = 7 * 24 * 60 * 60 * 1000;
+// Opt-in heartbeat rollout, ONLY after the additive D1 migration and client update.
+const PRESENCE_TTL_MS = 3 * 60 * 1000;
+const presenceTrackingEnabled = env => env.PRESENCE_TTL_ENABLED === 'true';
 const encoder = new TextEncoder();
 
 class HttpError extends Error {
@@ -421,6 +424,57 @@ async function voiceToken(request, env, roomId) {
   return json({ token: participant.token, role, seat, expires_in: 900 });
 }
 
+
+/**
+ * Room membership heartbeat. Fail open for legacy schema until the operator
+ * applies the additive migration AND explicitly enables PRESENCE_TTL_ENABLED.
+ * A rejected/expired user must rejoin; this endpoint never creates a room.
+ */
+async function roomHeartbeat(request, env, roomId) {
+  const { user } = await activeChatMembership(request, env, roomId);
+  await rateLimit(request, env, 'room-presence', user.id);
+  if (!presenceTrackingEnabled(env)) return json({ active: true, tracking: false });
+  const now = Date.now();
+  const touched = await env.DB.prepare('UPDATE room_memberships SET last_seen_at_ms = ? WHERE room_id = ? AND user_id = ? AND left_at IS NULL AND last_seen_at_ms >= ?')
+    .bind(now, roomId, user.id, now - PRESENCE_TTL_MS).run();
+  if (touched.meta?.changes !== 1) throw new HttpError(403, 'join_room_first');
+  await pruneRoomPresence(env, roomId);
+  return json({ active: true, tracking: true, heartbeat_interval_seconds: 25, ttl_seconds: 180 });
+}
+
+/**
+ * Reclaim seats of clients that crash/disconnect. Limited work per heartbeat
+ * prevents a single request from revoking many RTC participants.
+ * RTC revoke comes first; on failure keep membership/seat so stale audio
+ * cannot silently outlive the database cleanup.
+ */
+async function pruneRoomPresence(env, roomId) {
+  if (!presenceTrackingEnabled(env)) return 0;
+  const cutoff = Date.now() - PRESENCE_TTL_MS;
+  const { results } = await env.DB.prepare(
+    'SELECT user_id FROM room_memberships WHERE room_id = ? AND left_at IS NULL AND last_seen_at_ms < ? ORDER BY last_seen_at_ms LIMIT 8'
+  ).bind(roomId, cutoff).all();
+  let cleaned = 0;
+  for (const { user_id } of results || []) {
+    try {
+      await revokeVoiceParticipant(env, roomId, user_id);
+    } catch (error) {
+      console.error(JSON.stringify({ event: 'sura_presence_voice_revoke_failed', room_id: roomId, name: error?.name }));
+      continue;
+    }
+    await env.DB.batch([
+      env.DB.prepare(
+        "UPDATE room_seats SET user_id = NULL, updated_at = datetime('now') WHERE room_id = ? AND user_id = ? AND EXISTS (SELECT 1 FROM room_memberships WHERE room_id = ? AND user_id = ? AND left_at IS NULL AND last_seen_at_ms < ?)"
+      ).bind(roomId, user_id, roomId, user_id, cutoff),
+      env.DB.prepare(
+        "UPDATE room_memberships SET left_at = datetime('now') WHERE room_id = ? AND user_id = ? AND left_at IS NULL AND last_seen_at_ms < ?"
+      ).bind(roomId, user_id, cutoff)
+    ]);
+    cleaned++;
+  }
+  return cleaned;
+}
+
 async function roomAction(request, env, roomId, action, seatNumber = null) {
   const user = await currentUser(request, env);
   await rateLimit(request, env, 'room-actions');
@@ -434,12 +488,20 @@ async function roomAction(request, env, roomId, action, seatNumber = null) {
       throw new HttpError(403, 'room_blocked');
     }
     if (room.status === 'locked' && room.owner_user_id !== user.id) throw new HttpError(403, 'room_locked');
+    if (presenceTrackingEnabled(env)) await pruneRoomPresence(env, roomId);
     const joinedAt = Date.now();
-    await env.DB.batch([
-      env.DB.prepare(`INSERT INTO room_memberships(room_id,user_id,permission,chat_since_id)
+    const membershipWrite = presenceTrackingEnabled(env)
+      ? env.DB.prepare(`INSERT INTO room_memberships(room_id,user_id,permission,chat_since_id,last_seen_at_ms)
+        VALUES(?,?,'member',(SELECT COALESCE(MAX(id),0) FROM room_messages WHERE room_id = ?),?)
+        ON CONFLICT(room_id,user_id) DO UPDATE SET left_at = NULL,
+          joined_at = datetime('now'), chat_since_id = excluded.chat_since_id,
+          last_seen_at_ms = excluded.last_seen_at_ms`).bind(roomId, user.id, roomId, joinedAt)
+      : env.DB.prepare(`INSERT INTO room_memberships(room_id,user_id,permission,chat_since_id)
         VALUES(?,?,'member',(SELECT COALESCE(MAX(id),0) FROM room_messages WHERE room_id = ?))
         ON CONFLICT(room_id,user_id) DO UPDATE SET left_at = NULL,
-          joined_at = datetime('now'), chat_since_id = excluded.chat_since_id`).bind(roomId, user.id, roomId),
+          joined_at = datetime('now'), chat_since_id = excluded.chat_since_id`).bind(roomId, user.id, roomId);
+    await env.DB.batch([
+      membershipWrite,
       env.DB.prepare('INSERT INTO room_audit_events(id, room_id, actor_user_id, action) VALUES(?, ?, ?, ?)')
         .bind(crypto.randomUUID(), roomId, user.id, 'join'),
       env.DB.prepare(`INSERT INTO room_messages(room_id, sender_user_id, kind, body, created_at_ms)
@@ -460,6 +522,12 @@ async function roomAction(request, env, roomId, action, seatNumber = null) {
     return json({ success: true, seat: null });
   }
   if (action === 'sit') {
+    // An expired membership must rejoin before it can acquire a seat.
+    if (presenceTrackingEnabled(env)) {
+      const recent = await env.DB.prepare('SELECT 1 AS active FROM room_memberships WHERE room_id = ? AND user_id = ? AND left_at IS NULL AND last_seen_at_ms >= ?')
+        .bind(roomId, user.id, Date.now() - PRESENCE_TTL_MS).first();
+      if (!recent) throw new HttpError(403, 'join_room_first');
+    }
     if (!Number.isInteger(seatNumber) || seatNumber < 1 || seatNumber > room.seat_count) throw new HttpError(400, 'invalid_seat');
     const alreadySeated = await env.DB.prepare('SELECT seat_number FROM room_seats WHERE room_id = ? AND user_id = ?').bind(roomId, user.id).first();
     if (alreadySeated) throw new HttpError(409, 'stand_before_changing_seat');
@@ -477,9 +545,12 @@ async function roomAction(request, env, roomId, action, seatNumber = null) {
 
 async function activeChatMembership(request, env, roomId) {
   const user = await currentUser(request, env);
+  const freshness = presenceTrackingEnabled(env)
+    ? ' AND m.last_seen_at_ms >= ' + Math.floor(Date.now() - PRESENCE_TTL_MS)
+    : '';
   const membership = await env.DB.prepare(`SELECT m.chat_since_id FROM room_memberships m
     JOIN rooms r ON r.id = m.room_id
-    WHERE m.room_id = ? AND m.user_id = ? AND m.left_at IS NULL AND r.status != 'closed'
+    WHERE m.room_id = ? AND m.user_id = ? AND m.left_at IS NULL AND r.status != 'closed' ${freshness}
     AND NOT EXISTS (SELECT 1 FROM room_bans b WHERE b.room_id = ? AND b.user_id = ?)`)
     .bind(roomId, user.id, roomId, user.id).first();
   if (!membership) throw new HttpError(403, 'join_room_first');
@@ -567,13 +638,17 @@ async function listRooms(request, env, url) {
   const country = url.searchParams.get('country')?.toUpperCase() || '';
   const homeCountry = url.searchParams.get('home_country')?.toUpperCase() || '';
   const sort = url.searchParams.get('sort') === 'popular' ? 'popular' : 'new';
+  // Conditional SQL keeps the older database usable until migration is applied.
+  const presencePredicate = presenceTrackingEnabled(env)
+    ? ' AND m.last_seen_at_ms >= ' + Math.floor(Date.now() - PRESENCE_TTL_MS)
+    : '';
   if (!['all', 'mine', 'history'].includes(scope) ||
     (country && !/^[A-Z]{2}$/.test(country)) || (homeCountry && !/^[A-Z]{2}$/.test(homeCountry))) {
     throw new HttpError(400, 'invalid_room_filter');
   }
   const user = scope === 'all' ? null : await currentUser(request, env);
   const rows = await env.DB.prepare(`SELECT r.id, r.name, r.country_code, r.seat_count, r.theme_key, r.created_at,
-    (SELECT COUNT(*) FROM room_memberships m WHERE m.room_id = r.id AND m.left_at IS NULL) AS active_count
+    (SELECT COUNT(*) FROM room_memberships m WHERE m.room_id = r.id AND m.left_at IS NULL ${presencePredicate}) AS active_count
     FROM rooms r ${user ? 'JOIN room_memberships mine ON mine.room_id = r.id AND mine.user_id = ?' : ''}
     WHERE r.status != 'closed' ${user ? (scope === 'history' ? 'AND mine.left_at IS NOT NULL' : 'AND mine.left_at IS NULL') : ''}
     AND (? = '' OR r.country_code = ?)
@@ -762,6 +837,8 @@ export default {
         if (memberModerationMatch) return await moderateMember(request, env, memberModerationMatch[1], memberModerationMatch[2]);
         const lockSeatMatch = /^\/api\/v1\/rooms\/([0-9a-f-]{36})\/seats\/([0-9]{1,2})\/(lock|unlock)$/i.exec(path);
         if (lockSeatMatch) return await setSeatLock(request, env, lockSeatMatch[1], Number(lockSeatMatch[2]), lockSeatMatch[3] === 'lock');
+        const heartbeatMatch = /^\/api\/v1\/rooms\/([0-9a-f-]{36})\/heartbeat$/i.exec(path);
+        if (heartbeatMatch) return await roomHeartbeat(request, env, heartbeatMatch[1]);
         const roomActionMatch = /^\/api\/v1\/rooms\/([0-9a-f-]{36})\/(join|leave|stand)$/i.exec(path);
         if (roomActionMatch) return await roomAction(request, env, roomActionMatch[1], roomActionMatch[2]);
         const seatMatch = /^\/api\/v1\/rooms\/([0-9a-f-]{36})\/seats\/([0-9]{1,2})$/i.exec(path);

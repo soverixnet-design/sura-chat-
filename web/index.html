@@ -214,7 +214,7 @@ nav button b img{display:block;margin:0 auto 2px;filter:drop-shadow(0 2px 3px #0
 "use strict";
 (function(){
  const API="https://sura-chat-api-staging.soverixnet.workers.dev";
- const S={token:"",user:null,tab:"home",signup:false,rooms:[],moments:[],threads:[],scope:"all",sort:"popular",roomId:"",seatSig:"",after:0,poll:null,busy:false,peer:"",peerName:"",dm:[]};
+ const S={token:"",user:null,tab:"home",signup:false,rooms:[],moments:[],threads:[],scope:"all",sort:"popular",roomId:"",seatSig:"",after:0,poll:null,heartbeatTimer:null,heartbeatUnsupported:false,busy:false,peer:"",peerName:"",dm:[]};
  const E=id=>document.getElementById(id);
  const safe=v=>String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
  const fmt=v=>Number(v||0).toLocaleString("en-US");
@@ -225,7 +225,7 @@ nav button b img{display:block;margin:0 auto 2px;filter:drop-shadow(0 2px 3px #0
   try{const r=await fetch(API+path,{method,headers,body:payload===undefined?undefined:JSON.stringify(payload),signal:c.signal,cache:"no-store"});const j=await r.json().catch(()=>({error:"invalid_response"}));if(!r.ok){if(r.status===401&&S.token)showLogin();throw Error(j.error||"HTTP "+r.status);}return j;}
   catch(e){throw Error(e.name==="AbortError"?"Connection timeout":e.message);}finally{clearTimeout(timer);}
  }
- function showLogin(){clearInterval(S.poll);S.poll=null;S.roomId="";S.token="";S.user=null;E("header").hidden=E("main").hidden=E("nav").hidden=true;E("room").hidden=true;E("room").classList.remove("show");E("login").hidden=false;authForm();}
+ function showLogin(){clearInterval(S.poll);clearInterval(S.heartbeatTimer);S.poll=null;S.heartbeatTimer=null;S.roomId="";S.token="";S.user=null;E("header").hidden=E("main").hidden=E("nav").hidden=true;E("room").hidden=true;E("room").classList.remove("show");E("login").hidden=false;authForm();}
  function authForm(){
   E("loginBox").innerHTML='<div class="tabs"><button class="'+(!S.signup?'on':'')+'" data-act="authTab" data-value="login">Login</button><button class="'+(S.signup?'on':'')+'" data-act="authTab" data-value="signup">Sign Up</button></div><form id="authForm" class="form">'+
    (S.signup?'<label>Name<input name="display_name" minlength="2" maxlength="40" required></label>':'')+
@@ -259,7 +259,29 @@ nav button b img{display:block;margin:0 auto 2px;filter:drop-shadow(0 2px 3px #0
   else x.innerHTML='<div class="h"><b>'+safe(S.tab.toUpperCase())+'</b></div><div class="card"><b>Not connected yet</b><p class="muted">No demo wallets, winnings, rankings or events are displayed. This feature requires audited server support.</p></div>';
  }
  function startApp(){E("login").hidden=true;E("header").hidden=E("main").hidden=E("nav").hidden=false;nav();go("home");}
- async function enter(id){if(S.busy||S.roomId)return;if(!/^[a-f0-9-]{36}$/i.test(id))return toast("Bad room ID");S.busy=true;try{await api("/api/v1/rooms/"+id+"/join","POST",{});S.roomId=id;S.after=0;S.seatSig="";E("chat").textContent="";E("room").hidden=false;E("room").classList.add("show");await syncRoom();S.poll=setInterval(()=>syncRoom().catch(e=>toast(e.message)),4000);}catch(e){toast(e.message);}finally{S.busy=false;}}
+
+ async function heartbeat(){
+   if(!S.roomId || S.heartbeatUnsupported)return;
+   const roomId=S.roomId;
+   try {
+     const response=await api("/api/v1/rooms/"+roomId+"/heartbeat","POST",{});
+     if(roomId!==S.roomId)return;
+     if(response.active===false){endLocalRoom("Room session expired. Rejoin to continue.");}
+   }catch(error){
+     if(error.message==="not_found"){
+       // The older deployed Worker has no endpoint yet; no disruptive alert.
+       S.heartbeatUnsupported=true;clearInterval(S.heartbeatTimer);S.heartbeatTimer=null;return;
+     }
+     if(error.message==="join_room_first"){endLocalRoom("Session expired. Please rejoin the room.");}
+   }
+ }
+ function endLocalRoom(message){
+   clearInterval(S.poll);clearInterval(S.heartbeatTimer);
+   S.poll=null;S.heartbeatTimer=null;S.roomId="";
+   E("room").hidden=true;E("room").classList.remove("show");
+   toast(message);go("rooms");
+ }
+ async function enter(id){if(S.busy||S.roomId)return;if(!/^[a-f0-9-]{36}$/i.test(id))return toast("Bad room ID");S.busy=true;try{await api("/api/v1/rooms/"+id+"/join","POST",{});S.roomId=id;S.heartbeatUnsupported=false;S.after=0;S.seatSig="";E("chat").textContent="";E("room").hidden=false;E("room").classList.add("show");await heartbeat();await syncRoom();S.poll=setInterval(()=>syncRoom().catch(e=>toast(e.message)),4000);if(!S.heartbeatUnsupported)S.heartbeatTimer=setInterval(heartbeat,25000);}catch(e){toast(e.message);}finally{S.busy=false;}}
  async function syncRoom(){
   const id=S.roomId;if(!id)return;
   const [a,b]=await Promise.all([api("/api/v1/rooms/"+id+"/seats"),api("/api/v1/rooms/"+id+"/messages?after="+S.after)]);
@@ -268,7 +290,7 @@ nav button b img{display:block;margin:0 auto 2px;filter:drop-shadow(0 2px 3px #0
   for(const m of (b.messages||[])){const p=document.createElement("p"),name=document.createElement("b");name.textContent=m.sender_name?m.sender_name+": ":"";p.appendChild(name);p.appendChild(document.createTextNode(m.body||""));E("chat").appendChild(p);S.after=Math.max(S.after,Number(m.id)||0);}
   while(E("chat").childNodes.length>80)E("chat").removeChild(E("chat").firstChild);if((b.messages||[]).length)E("chat").scrollTop=E("chat").scrollHeight;
  }
- async function leave(){if(!S.roomId)return;const id=S.roomId;clearInterval(S.poll);S.poll=null;try{await api("/api/v1/rooms/"+id+"/leave","POST",{});S.roomId="";E("room").hidden=true;E("room").classList.remove("show");go("rooms");}catch(e){toast("Exit failed: "+e.message);S.poll=setInterval(()=>syncRoom().catch(()=>{}),4000);}}
+ async function leave(){if(!S.roomId)return;const id=S.roomId;clearInterval(S.poll);clearInterval(S.heartbeatTimer);S.poll=null;S.heartbeatTimer=null;try{await api("/api/v1/rooms/"+id+"/leave","POST",{});S.roomId="";E("room").hidden=true;E("room").classList.remove("show");go("rooms");}catch(e){toast("Exit failed: "+e.message);S.poll=setInterval(()=>syncRoom().catch(()=>{}),4000);if(!S.heartbeatUnsupported)S.heartbeatTimer=setInterval(heartbeat,25000);}}
  async function openDm(id){if(!/^\d{7}$/.test(id))return toast("Invalid member ID");const r=await api("/api/v1/messages/"+id);S.peer=id;S.peerName=r.peer?.display_name||id;S.dm=r.messages||[];S.tab="dm";nav();render();}
  document.addEventListener("click",async e=>{const el=e.target.closest("[data-act]");if(!el)return;try{const a=el.dataset.act;
   if(a==="authTab"){S.signup=el.dataset.value==="signup";authForm();}
@@ -296,6 +318,6 @@ nav button b img{display:block;margin:0 auto 2px;filter:drop-shadow(0 2px 3px #0
   }catch(err){toast(err.message);}finally{if(btn)btn.disabled=false;}
  });
  window.suraBack=function(){if(S.roomId){leave();return true;}if(S.tab!=="home"){go("home");return true;}return false;};
- document.addEventListener("visibilitychange",()=>{if(document.hidden){clearInterval(S.poll);S.poll=null;}else if(S.roomId&&!S.poll)S.poll=setInterval(()=>syncRoom().catch(()=>{}),4000);});
+ document.addEventListener("visibilitychange",()=>{if(document.hidden){clearInterval(S.poll);clearInterval(S.heartbeatTimer);S.poll=null;S.heartbeatTimer=null;}else if(S.roomId&&!S.poll){heartbeat();S.poll=setInterval(()=>syncRoom().catch(()=>{}),4000);if(!S.heartbeatUnsupported)S.heartbeatTimer=setInterval(heartbeat,25000);}});
  showLogin();
 })();</script></body></html>
