@@ -190,3 +190,16 @@ test('room discovery search and country filter use real SURA room results', () =
   assert.match(html, /String\(r\.name\|\|""\)\.toLocaleLowerCase\(\)\.includes\(search\)/);
   assert.doesNotMatch(html, /coins:328500/);
 });
+
+
+test('room member popup loads actual profile and leaves voice active until message action', () => {
+  assert.match(html, /id="memberProfileSheet"/);
+  assert.match(html, /id="memberProfileBody"/);
+  assert.match(html, /async function openMemberProfile\(publicId\)/);
+  assert.match(html, /await api\("\/api\/v1\/users\/"\+encodeURIComponent\(id\)\)/);
+  assert.match(html, /else if\(a==="member"\)await openMemberProfile\(el\.dataset\.id\)/);
+  assert.match(html, /else if\(a==="closeMemberProfile"\)closeMemberProfile\(\)/);
+  assert.match(html, /else if\(a==="memberMessage"\)/);
+  assert.match(html, /if\(!E\("memberProfileSheet"\)\.hidden\)\{closeMemberProfile\(\);return true;\}/);
+  assert.doesNotMatch(html, /confirm\(r\.user\.display_name/);
+});
