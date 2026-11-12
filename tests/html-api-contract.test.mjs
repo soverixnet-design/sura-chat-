@@ -265,3 +265,14 @@ test('moderation UI only uses verified backend data and keeps Royal reference la
  assert.match(html,/if\(!S\.moderator\)throw Error/);
  assert.match(html,/S\.moderator=false/);
 });
+
+test('account security is server-backed and contains no demo recovery claims', () => {
+ assert.match(html,/id="changePasswordForm"/);
+ assert.match(html,/id="revokeOthersForm"/);
+ assert.match(html,/\/api\/v1\/auth\/change-password/);
+ assert.match(html,/\/api\/v1\/auth\/revoke-other-sessions/);
+ assert.match(html,/name="current_password"/);
+ assert.match(html,/name="confirm_password"/);
+ assert.match(html,/Passwords do not match/);
+ assert.match(html,/Email recovery is not available yet/);
+});
