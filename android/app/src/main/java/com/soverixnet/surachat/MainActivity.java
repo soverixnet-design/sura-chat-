@@ -225,38 +225,65 @@ public final class MainActivity extends Activity {
     private void showAuth(boolean register) {
         view = "login";
         activeRoom = null;
-        LinearLayout p = page(register ? "Create your account" : "Welcome back");
-        p.addView(text("Royal Premium voice-room community · staging preview", 13, MUTED));
-        EditText name = register ? field(p, "Nickname (2–40 characters)", InputType.TYPE_CLASS_TEXT, "") : null;
-        EditText email = field(p, "Email address", InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS, "");
-        EditText pin = field(p, register ? "8-digit numeric password" : "Password",
-                register ? (InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_VARIATION_PASSWORD)
-                        : (InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD), "");
-        EditText region = register ? field(p, "Country code (BD, OM, IN…)", InputType.TYPE_CLASS_TEXT, country) : null;
-        p.addView(button(register ? "Sign up" : "Sign in", v -> {
+        LinearLayout p = page("");
+        hero(p,"ROYAL SOCIAL LOUNGE","Connect · Talk · Make Friends",
+            "A welcoming home for live voice rooms and conversations.",
+            "sura_voice_support",null);
+        LinearLayout switcher = new LinearLayout(this);
+        switcher.setOrientation(LinearLayout.HORIZONTAL);
+        Button loginTab = button("Login",v -> showAuth(false));
+        Button signupTab = button("Sign up",v -> showAuth(true));
+        loginTab.setBackground(register?RoyalTheme.bg(this,false,16):RoyalTheme.goldButton(this));
+        signupTab.setBackground(register?RoyalTheme.goldButton(this):RoyalTheme.bg(this,false,16));
+        loginTab.setTextColor(register?WHITE:BG);
+        signupTab.setTextColor(register?BG:WHITE);
+        switcher.addView(loginTab,new LinearLayout.LayoutParams(0,dp(51),1));
+        switcher.addView(signupTab,new LinearLayout.LayoutParams(0,dp(51),1));
+        p.addView(switcher,RoyalTheme.margins(this,55,0,7,12));
+
+        LinearLayout form = RoyalTheme.framed(this);
+        form.addView(RoyalTheme.text(this,register?"Create your account":"Welcome back",21,WHITE,true));
+        form.addView(RoyalTheme.text(this,
+            register?"Join the SURA CHAT community":"Sign in securely with your email and password",
+            12,MUTED,false));
+        EditText name = register ? field(form,"Nickname (2–40 characters)",InputType.TYPE_CLASS_TEXT,"") : null;
+        EditText email = field(form,"Email address",InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS,"");
+        EditText pin = field(form, register?"8-digit numeric password":"Password",
+                register?(InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_VARIATION_PASSWORD):
+                         (InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD),"");
+        EditText region = register ? field(form,"Country code (BD, OM, IN…)",InputType.TYPE_CLASS_TEXT,country) : null;
+        Button submit = goldAction(register?"Create account":"Sign in",null);
+        form.addView(submit);
+        submit.setOnClickListener(v -> {
             try {
                 JSONObject payload = new JSONObject()
-                    .put("email", typed(email)).put("password", typed(pin));
-                if (register) payload.put("display_name", typed(name))
-                    .put("country_code", typed(region).toUpperCase(java.util.Locale.ROOT));
-                api.post(register ? "/api/v1/auth/signup" : "/api/v1/auth/login", payload, (status, response) -> {
-                    if (status < 200 || status >= 300) { error(status, response); return; }
-                    String token = response.optString("token", "");
-                    if (token.isEmpty()) { notifyUser("Missing session token"); return; }
+                    .put("email",typed(email)).put("password",typed(pin));
+                if (register) payload.put("display_name",typed(name))
+                    .put("country_code",typed(region).toUpperCase(java.util.Locale.ROOT));
+                submit.setEnabled(false);
+                submit.setText("Connecting…");
+                api.post(register?"/api/v1/auth/signup":"/api/v1/auth/login", payload, (status,response)->{
+                    submit.setEnabled(true);
+                    submit.setText(register?"Create account":"Sign in");
+                    if (isFinishing() || isDestroyed()) return;
+                    if (status<200 || status>=300) {error(status,response);return;}
+                    String token=response.optString("token","");
+                    if(token.isEmpty()) {notifyUser("Missing session token");return;}
                     api.setSession(token);
-                    JSONObject user = response.optJSONObject("user");
-                    if (user != null) {
-                        country = user.optString("country_code", "");
-                        if ("null".equals(country)) country = "";
-                        publicId = user.optString("public_id", "");
+                    JSONObject user=response.optJSONObject("user");
+                    if(user!=null) {
+                        country=user.optString("country_code","");
+                        if ("null".equals(country)) country="";
+                        publicId=user.optString("public_id","");
                     }
-                    showRooms("all", "popular");
+                    showHome();
                 });
-            } catch (Exception ex) { notifyUser("Invalid signup fields"); }
-        }));
-        p.addView(button(register ? "Already registered? Sign in" : "New here? Create account",
-                v -> showAuth(!register)));
-        p.addView(text("Passwords are sent over HTTPS. Sessions are memory-only in this preview; sign in again after restart.", 12, MUTED));
+            } catch(Exception ex) { notifyUser("Please check all account fields");}
+        });
+        form.addView(RoyalTheme.text(this,
+            "This staging build uses email/password. Google, phone and other social sign-ins are not connected.",
+            11,MUTED,false));
+        p.addView(form,RoyalTheme.margins(this,-2,0,4,10));
     }
 
     private LinearLayout shell(String section) {
@@ -298,27 +325,86 @@ public final class MainActivity extends Activity {
 
     private void showHome() {
         LinearLayout p = shell("Home · Discover");
-        p.addView(featureCard("Voice Rooms", "Join a Royal Lounge", "sura_voice_support",
-                v -> showRooms("all", "popular")));
-        p.addView(featureCard("Private Messages", "Your conversations", "sura_messages",
-                v -> showMessages()));
-        p.addView(featureCard("Community", "Latest moments and people", "sura_community", null));
-        p.addView(text("Latest Moments", 19, GOLD));
-        TextView feed = text("Loading Moments…", 14, MUTED);
+        hero(p,"✦ WELCOME TO SURA CHAT","Join live voice rooms",
+             "Find your circle · Make friends · Share moments",
+             "sura_voice_support",v -> showRooms("all","popular"));
+        p.addView(goldAction("✧ Explore rooms", v -> showRooms("all","popular")));
+        RoyalTheme.displaySection(p,this,"Discover","Your community at a glance");
+        p.addView(featureCard("Voice Rooms","Browse live rooms around the world",
+                "sura_voice_support",v -> showRooms("all","popular")));
+        p.addView(featureCard("Moments","Read and share community updates",
+                "sura_community",v -> showMoments()));
+        p.addView(featureCard("Private Messages","Your real conversations",
+                "sura_messages",v -> showMessages()));
+        p.addView(featureCard("Event Center","Upcoming campaigns & promotions",
+                "sura_recharge",v -> showEvents()));
+        p.addView(featureCard("Rankings","Daily, weekly and monthly leaderboards",
+                "sura_vip",v -> showRanking()));
+        RoyalTheme.displaySection(p,this,"Live Rooms","Showing real rooms from the server");
+        LinearLayout list = new LinearLayout(this);
+        list.setOrientation(LinearLayout.VERTICAL);
+        list.addView(RoyalTheme.text(this,"Loading live rooms…",13,MUTED,false));
+        p.addView(list);
+        api.get("/api/v1/rooms?scope=all&sort=popular&limit=6&home_country="+country,(status,json)->{
+            if (isFinishing() || isDestroyed() || list.getParent()==null) return;
+            list.removeAllViews();
+            if(status!=200) {
+                list.addView(RoyalTheme.text(this,"Rooms are temporarily unavailable.",13,MUTED,false));
+                return;
+            }
+            JSONArray rooms=json.optJSONArray("rooms");
+            if(rooms==null||rooms.length()==0) {
+                list.addView(RoyalTheme.text(this,"No live rooms yet. Create the first one!",13,MUTED,false));
+                return;
+            }
+            for(int i=0;i<Math.min(rooms.length(),3);i++){
+                JSONObject room=rooms.optJSONObject(i);
+                if(room!=null) list.addView(roomTile(room));
+            }
+        });
+        RoyalTheme.displaySection(p,this,"Latest Moments","Posts from real members");
+        TextView feed=RoyalTheme.text(this,"Loading moments…",13,MUTED,false);
         p.addView(feed);
-        api.get("/api/v1/moments?limit=20", (code, json) -> {
-            if (code != 200) { feed.setText("Moments unavailable: " + json.optString("error")); return; }
-            JSONArray moments = json.optJSONArray("moments");
-            if (moments == null || moments.length() == 0) { feed.setText("No Moments yet."); return; }
-            StringBuilder out = new StringBuilder();
-            for (int i = 0; i < moments.length(); i++) {
-                JSONObject m = moments.optJSONObject(i);
-                if (m != null) out.append("✦ ").append(m.optString("author_name", "User"))
-                        .append(": ").append(m.optString("body", "")).append("\n\n");
+        api.get("/api/v1/moments?limit=3",(code,json)->{
+            if(isFinishing()||isDestroyed()||feed.getParent()==null) return;
+            if(code!=200){feed.setText("Moments are unavailable right now.");return;}
+            JSONArray moments=json.optJSONArray("moments");
+            if(moments==null || moments.length()==0){feed.setText("No Moments yet.");return;}
+            StringBuilder out=new StringBuilder();
+            for(int i=0;i<moments.length();i++){
+                JSONObject m=moments.optJSONObject(i);
+                if(m!=null)out.append("✦ ").append(m.optString("author_name","Member"))
+                    .append("\n").append(m.optString("body","")).append("\n\n");
             }
             feed.setText(out.toString());
         });
-        p.addView(button("Browse live rooms", v -> showRooms("all", "popular")));
+    }
+
+    private LinearLayout roomTile(JSONObject room) {
+        String id=room.optString("id");
+        String name=room.optString("name","Voice Room");
+        String code=room.optString("country_code","Global");
+        LinearLayout tile=RoyalTheme.framed(this);
+        tile.setOrientation(LinearLayout.HORIZONTAL);
+        tile.setGravity(Gravity.CENTER_VERTICAL);
+        tile.addView(RoyalIcons.view(this,"sura_voice_support",74,"♛"),
+                new LinearLayout.LayoutParams(dp(74),dp(74)));
+        LinearLayout words=new LinearLayout(this);
+        words.setOrientation(LinearLayout.VERTICAL);
+        words.setPadding(dp(11),0,0,0);
+        TextView title=RoyalTheme.text(this,name,16,WHITE,true);
+        title.setSingleLine(true);
+        title.setEllipsize(TextUtils.TruncateAt.END);
+        words.addView(title);
+        words.addView(RoyalTheme.text(this,
+                (code.equals("null")?"Global":code)+" · "+room.optInt("active_count",0)+" members",12,MUTED,false));
+        words.addView(RoyalTheme.text(this,"JOIN ROOM  ›",11,GOLD,true));
+        tile.addView(words,new LinearLayout.LayoutParams(0,-2,1));
+        tile.setMinimumHeight(dp(101));
+        tile.setOnClickListener(v -> joinRoom(id,name,code));
+        tile.setContentDescription("Join room "+name);
+        tile.setLayoutParams(RoyalTheme.margins(this,-2,0,5,5));
+        return tile;
     }
 
     private void showRooms(String scope, String sort) {
