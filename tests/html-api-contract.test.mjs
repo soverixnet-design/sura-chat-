@@ -33,3 +33,17 @@ test('the Android debug launcher is local and production fails closed', () => {
     assert.ok(!java.includes('loadDataWithBaseURL'));
     assert.ok(!java.includes('setAllowUniversalAccessFromFileURLs(true)'));
 });
+
+
+test('SURA login displays a persistent actionable server error and proper form',()=>{
+ assert.match(html, /id="authIssue"/);
+ assert.match(html, /function authMessage\(/);
+ assert.match(html, /function showAuthIssue\(/);
+ assert.match(html, /invalid_credentials/);
+ assert.match(html, /account_exists/);
+ assert.match(html, /network_unavailable/);
+ assert.match(html, /autocomplete="current-password"/);
+ assert.match(html, /pattern="\[0-9\]\{8\}"/);
+ assert.match(html, /S\.signup=false/);
+ assert.match(html, /typeof r\.token!=="string"/);
+});

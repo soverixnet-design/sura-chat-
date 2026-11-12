@@ -1,0 +1,47 @@
+name: SURA v0.5.5 Android login-fix public APK
+on:
+  push:
+    branches: [feature/sura-real-login-staging-20261112]
+    paths: ['.github/workflows/sura-login-apk-release.yml']
+permissions:
+  contents: write
+  actions: read
+jobs:
+  publish-verified-debug:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Require actual Android WebView auth acceptance
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for attempt in $(seq 1 45); do
+            result="$(gh run view 43253112296 --repo "$GITHUB_REPOSITORY" --json conclusion --jq '.conclusion')"
+            echo "Emulator auth QA status: ${result:-pending}"
+            if [ "$result" = "success" ]; then exit 0; fi
+            if [ "$result" = "failure" ] || [ "$result" = "cancelled" ] || [ "$result" = "timed_out" ]; then
+              echo 'Blocking release: Android login acceptance did not pass'
+              exit 1
+            fi
+            sleep 20
+          done
+          echo 'Android QA did not finish within the publication gate'
+          exit 1
+      - name: Download and verify latest login-fix staging APK
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p out
+          gh run download 43253112246 --repo "$GITHUB_REPOSITORY" --name sura-chat-debug-unverified --dir out
+          mv out/app-debug.apk out/SURA_CHAT_Royal_3D_v0.5.5_Login_Staging.apk
+          printf '%s  %s\n' 'd67b63ed861bfc8ea377d007224506d735e2665c94ed7a50882dfee17783c835' 'out/SURA_CHAT_Royal_3D_v0.5.5_Login_Staging.apk' | sha256sum --check
+      - name: Publish public but explicitly TEST-ONLY pre-release APK
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create sura-chat-v0.5.5-staging 'out/SURA_CHAT_Royal_3D_v0.5.5_Login_Staging.apk#SURA CHAT Royal 3D login testing APK' --repo "$GITHUB_REPOSITORY" --target 7a8f1ab140d3d260dfaacff97760bd894d6df736 --title 'SURA CHAT v0.5.5 — Login testing (Android staging)' --notes 'Staging TEST APK only, not a Play Store release. Clarifies SURA-specific signup/login, persistent error messages and connection failures. Android emulator real signup/logout/login/rooms integration QA passed before publication. Google login, background voice, two-phone audible media, purchases and games not verified.' --prerelease
+      - name: Confirm direct APK asset exists
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view sura-chat-v0.5.5-staging --repo "$GITHUB_REPOSITORY" --json tagName,isPrerelease,assets,url

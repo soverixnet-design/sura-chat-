@@ -3,6 +3,7 @@ on:
   push:
     branches:
       - feature/sura-android-emulator-smoke-20261112
+      - feature/sura-real-login-staging-20261112
     paths:
       - 'android/**'
       - '.github/workflows/android-emulator-smoke.yml'
