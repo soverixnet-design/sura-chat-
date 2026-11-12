@@ -70,6 +70,16 @@ jobs:
           assert status == 401 and data.get('error') == 'login_required', (status, data)
           print('OK member safety endpoints reject anonymous access')
 
+          status, data = check('/api/v1/me/reports')
+          assert status == 401 and data.get('error') == 'login_required', (status, data)
+          status, data = check('/api/v1/staff/access')
+          assert status == 401 and data.get('error') == 'login_required', (status, data)
+          status, data = check('/api/v1/staff/reports?status=open')
+          assert status == 401 and data.get('error') == 'login_required', (status, data)
+          status, data = check('/api/v1/staff/reports/00000000-0000-4000-8000-000000000001/review', method='POST')
+          assert status == 401 and data.get('error') == 'login_required', (status, data)
+          print('OK report queue and staff review deny anonymous access')
+
           status, data = check('/api/v1/me')
           assert status == 401 and data.get('error') == 'login_required', (status, data)
           print('OK protected profile rejects anonymous access')
