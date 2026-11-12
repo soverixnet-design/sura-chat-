@@ -16,6 +16,7 @@ import android.text.TextWatcher;
 import android.text.Editable;
 import android.widget.Button;
 import android.widget.EditText;
+import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
@@ -701,10 +702,21 @@ public final class MainActivity extends Activity {
              "Manage your account and share your story",
              "sura_special_id",null);
         LinearLayout header=RoyalTheme.framed(this);
+        LinearLayout identity=new LinearLayout(this);
+        identity.setOrientation(LinearLayout.HORIZONTAL);
+        identity.setGravity(Gravity.CENTER_VERTICAL);
+        FrameLayout portrait=new FrameLayout(this);
+        portrait.addView(RoyalTheme.avatar(this,"♛"),new FrameLayout.LayoutParams(-1,-1));
+        identity.addView(portrait,new LinearLayout.LayoutParams(dp(80),dp(80)));
+        LinearLayout fields=new LinearLayout(this);
+        fields.setOrientation(LinearLayout.VERTICAL);
+        fields.setPadding(dp(13),0,0,0);
         TextView profile=RoyalTheme.text(this,"Loading profile…",18,GOLD,true);
-        header.addView(profile);
+        fields.addView(profile);
         TextView bioLabel=RoyalTheme.text(this,"",13,MUTED,false);
-        header.addView(bioLabel);
+        fields.addView(bioLabel);
+        identity.addView(fields,new LinearLayout.LayoutParams(0,-2,1));
+        header.addView(identity);
         p.addView(header,RoyalTheme.margins(this,-2,0,5,7));
         RoyalTheme.displaySection(p,this,"Edit your profile","Your changes are saved to your account");
         EditText name=field(p,"Display name",InputType.TYPE_CLASS_TEXT,"");
@@ -716,8 +728,9 @@ public final class MainActivity extends Activity {
             if(me!=null){
                 publicId=me.optString("public_id","");
                 String display=me.optString("display_name","Member");
-                profile.setText("♛ "+display+" · ID "+publicId);
+                profile.setText("♛ "+display+"\nSURA ID: "+publicId);
                 bioLabel.setText("Country: "+me.optString("country_code","Global"));
+                AvatarLoader.render(this,portrait,publicId,display,me.optString("avatar_key",""),80);
                 name.setText(display);
                 bio.setText(me.optString("bio",""));
             }
