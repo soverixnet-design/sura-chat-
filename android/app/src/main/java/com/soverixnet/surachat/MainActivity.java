@@ -8,6 +8,12 @@ import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.text.InputType;
 import android.view.View;
+import android.view.Gravity;
+import android.view.WindowInsets;
+import android.os.Build;
+import android.text.TextUtils;
+import android.text.TextWatcher;
+import android.text.Editable;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.LinearLayout;
@@ -23,12 +29,13 @@ import org.json.JSONObject;
  * RTC audio, coin spending, gifts, and payments are NOT implemented by this UI.
  */
 public final class MainActivity extends Activity {
-    private static final int BG = Color.rgb(16, 19, 41);
-    private static final int PANEL = Color.rgb(49, 32, 75);
-    private static final int GOLD = Color.rgb(233, 190, 104);
-    private static final int WHITE = Color.rgb(246, 244, 252);
-    private static final int MUTED = Color.rgb(192, 185, 213);
+    private static final int BG = RoyalTheme.NAVY;
+    private static final int PANEL = RoyalTheme.PANEL;
+    private static final int GOLD = RoyalTheme.GOLD;
+    private static final int WHITE = RoyalTheme.CREAM;
+    private static final int MUTED = RoyalTheme.MUTED;
     private final ApiClient api = new ApiClient();
+    private LinearLayout appRoot;
     private String country = "";
     private String publicId = "";
     private String activeRoom = null;
@@ -58,19 +65,50 @@ public final class MainActivity extends Activity {
     private int dp(int value) { return (int)(getResources().getDisplayMetrics().density * value + 0.5f); }
 
     private LinearLayout page(String heading) {
-        LinearLayout content = new LinearLayout(this);
-        content.setOrientation(LinearLayout.VERTICAL);
-        content.setPadding(dp(16), dp(18), dp(16), dp(30));
-        content.setBackgroundColor(BG);
+        getWindow().setStatusBarColor(BG);
+        getWindow().setNavigationBarColor(BG);
+        appRoot = new LinearLayout(this);
+        appRoot.setOrientation(LinearLayout.VERTICAL);
+        appRoot.setBackgroundColor(BG);
+        if (Build.VERSION.SDK_INT >= 30) {
+            appRoot.setOnApplyWindowInsetsListener((v, insets) -> {
+                android.graphics.Insets bars = insets.getInsets(WindowInsets.Type.systemBars());
+                v.setPadding(0, bars.top, 0, bars.bottom);
+                return insets;
+            });
+        } else {
+            appRoot.setFitsSystemWindows(true);
+        }
         ScrollView scroller = new ScrollView(this);
         scroller.setFillViewport(true);
+        scroller.setClipToPadding(false);
+        scroller.setVerticalScrollBarEnabled(false);
         scroller.setBackgroundColor(BG);
+        appRoot.addView(scroller, new LinearLayout.LayoutParams(-1, 0, 1));
+        LinearLayout content = new LinearLayout(this);
+        content.setOrientation(LinearLayout.VERTICAL);
+        content.setPadding(dp(15),dp(9),dp(15),dp(18));
         scroller.addView(content);
-        setContentView(scroller);
-        TextView brand = text("✦ SURA CHAT", 25, GOLD);
-        brand.setTypeface(null, Typeface.BOLD);
-        content.addView(brand);
-        content.addView(text(heading, 18, WHITE));
+
+        LinearLayout header = new LinearLayout(this);
+        header.setGravity(Gravity.CENTER_VERTICAL);
+        TextView emblem = RoyalTheme.avatar(this,"♛");
+        header.addView(emblem,new LinearLayout.LayoutParams(dp(41),dp(41)));
+        LinearLayout brandText = new LinearLayout(this);
+        brandText.setOrientation(LinearLayout.VERTICAL);
+        brandText.setPadding(dp(9), 0, 0, 0);
+        TextView brand = RoyalTheme.text(this,"✦ SURA CHAT",23,GOLD,true);
+        brandText.addView(brand);
+        brandText.addView(RoyalTheme.text(this,"ROYAL VOICE COMMUNITY",9,MUTED,true));
+        header.addView(brandText,new LinearLayout.LayoutParams(0,-2,1));
+        TextView sparkle = RoyalTheme.text(this,"✧",28,GOLD,true);
+        sparkle.setGravity(Gravity.CENTER);
+        header.addView(sparkle,new LinearLayout.LayoutParams(dp(34),dp(39)));
+        content.addView(header,RoyalTheme.margins(this,65,0,0,4));
+        if (!"".equals(heading)) {
+            content.addView(RoyalTheme.title(this,heading,""));
+        }
+        setContentView(appRoot);
         return content;
     }
 
@@ -103,32 +141,57 @@ public final class MainActivity extends Activity {
     }
 
 
-    // Royal icon cards stay within the existing navigation, not new payment flows.
+    // Content wraps to its text and scales across screen sizes; no clipped subtitles.
     private LinearLayout featureCard(String heading, String subtitle, String iconName, View.OnClickListener action) {
         LinearLayout card = new LinearLayout(this);
         card.setOrientation(LinearLayout.HORIZONTAL);
-        card.setGravity(android.view.Gravity.CENTER_VERTICAL);
-        card.setPadding(dp(9), dp(7), dp(12), dp(7));
-        GradientDrawable panel = new GradientDrawable(GradientDrawable.Orientation.TL_BR,
-                new int[]{PANEL, Color.rgb(28, 26, 62)});
-        panel.setCornerRadius(dp(17));
-        panel.setStroke(dp(1), GOLD);
-        card.setBackground(panel);
-        card.addView(RoyalIcons.view(this, iconName, 57, "✦"),
-                new LinearLayout.LayoutParams(dp(60), dp(60)));
+        card.setGravity(Gravity.CENTER_VERTICAL);
+        card.setPadding(dp(11),dp(10),dp(12),dp(10));
+        card.setBackground(RoyalTheme.bg(this,true,19));
+        card.setMinimumHeight(dp(93));
+        card.addView(RoyalIcons.view(this,iconName,66,"✦"),
+            new LinearLayout.LayoutParams(dp(66),dp(66)));
         LinearLayout labels = new LinearLayout(this);
         labels.setOrientation(LinearLayout.VERTICAL);
-        labels.setPadding(dp(10), 0, 0, 0);
-        TextView title = text(heading, 15, WHITE);
-        title.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        labels.setPadding(dp(12),0,0,0);
+        TextView title = RoyalTheme.text(this,heading,16,WHITE,true);
         labels.addView(title);
-        labels.addView(text(subtitle, 12, MUTED));
-        card.addView(labels, new LinearLayout.LayoutParams(0, -2, 1));
-        if (action != null) card.setOnClickListener(action);
-        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, dp(85));
-        params.setMargins(dp(2), dp(5), dp(2), dp(5));
-        card.setLayoutParams(params);
+        TextView description = RoyalTheme.text(this,subtitle,12,MUTED,false);
+        description.setMaxLines(3);
+        labels.addView(description);
+        card.addView(labels,new LinearLayout.LayoutParams(0,-2,1));
+        if (action != null) {
+            TextView chevron = RoyalTheme.text(this,"›",26,GOLD,true);
+            chevron.setGravity(Gravity.CENTER);
+            card.addView(chevron,new LinearLayout.LayoutParams(dp(22),dp(48)));
+            card.setOnClickListener(action);
+            card.setContentDescription(heading);
+        }
+        card.setLayoutParams(RoyalTheme.margins(this,-2,0,5,5));
         return card;
+    }
+
+    private Button goldAction(String label, View.OnClickListener click) {
+        Button b = button(label, click);
+        b.setBackground(RoyalTheme.goldButton(this));
+        b.setTextColor(BG);
+        b.setTypeface(Typeface.DEFAULT,Typeface.BOLD);
+        b.setTextSize(16);
+        return b;
+    }
+
+    private void hero(LinearLayout parent, String kicker, String title, String subtitle, String image, View.OnClickListener click) {
+        LinearLayout panel = RoyalTheme.hero(this,kicker,title,subtitle,image);
+        panel.setLayoutParams(RoyalTheme.margins(this,148,0,5,9));
+        if (click != null) panel.setOnClickListener(click);
+        parent.addView(panel);
+    }
+
+    private void notice(LinearLayout parent, String title, String message) {
+        LinearLayout box = RoyalTheme.framed(this);
+        box.addView(RoyalTheme.text(this,title,16,GOLD,true));
+        box.addView(RoyalTheme.text(this,message,13,MUTED,false));
+        parent.addView(box,RoyalTheme.margins(this,-2,0,5,8));
     }
 
     private EditText field(LinearLayout parent, String hint, int inputType, String initial) {
@@ -197,24 +260,39 @@ public final class MainActivity extends Activity {
     }
 
     private LinearLayout shell(String section) {
-        view = "home";
+        view = section;
         LinearLayout p = page(section);
         LinearLayout tabs = new LinearLayout(this);
         tabs.setOrientation(LinearLayout.HORIZONTAL);
-        String[] names = {"Home", "Rooms", "Create", "Messages", "Me"};
-        String[] icons = {"sura_community", "sura_voice_support", "sura_announcement", "sura_messages", "sura_special_id"};
-        Runnable[] actions = {this::showHome, () -> showRooms("all","popular"),
-            this::showCreate, this::showMessages, this::showMe};
+        tabs.setPadding(dp(6),dp(5),dp(6),dp(6));
+        tabs.setBackground(RoyalTheme.bg(this,false,22));
+        String[] names = {"Home","Rooms","Moments","Messages","Profile"};
+        String[] icons = {"sura_community","sura_voice_support","sura_diamond_wallet","sura_messages","sura_special_id"};
+        Runnable[] actions = {this::showHome,() -> showRooms("all","popular"),
+            this::showMoments,this::showMessages,this::showMe};
+        String active = section.startsWith("Room") || section.startsWith("Create") ? "Rooms"
+            : section.startsWith("My profile") ? "Profile" : section.startsWith("Home") ? "Home"
+            : section;
         for (int i = 0; i < names.length; i++) {
             final int selected = i;
-            Button b = button(names[i], v -> actions[selected].run());
+            Button b = new Button(this);
+            b.setAllCaps(false);
+            b.setText(names[i]);
             b.setTextSize(10);
-            RoyalIcons.decorateButton(this, b, icons[i], 18, true);
-            LinearLayout.LayoutParams layout = new LinearLayout.LayoutParams(0, dp(51), 1);
-            layout.setMargins(dp(1), dp(5), dp(1), dp(5));
-            tabs.addView(b, layout);
+            b.setTextColor(names[i].equals(active)?BG:WHITE);
+            b.setMinHeight(0);
+            b.setMinimumHeight(0);
+            b.setPadding(0,0,0,0);
+            b.setGravity(Gravity.CENTER);
+            b.setBackground(names[i].equals(active)?RoyalTheme.goldButton(this):
+                    RoyalTheme.bg(this,false,15));
+            RoyalIcons.decorateButton(this,b,icons[i],20,true);
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0,dp(56),1);
+            lp.setMargins(dp(2),0,dp(2),0);
+            tabs.addView(b,lp);
+            b.setOnClickListener(v -> actions[selected].run());
         }
-        p.addView(tabs);
+        appRoot.addView(tabs,new LinearLayout.LayoutParams(-1,dp(68)));
         return p;
     }
 
