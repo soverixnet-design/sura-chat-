@@ -112,6 +112,38 @@ async function currentUser(request, env) {
   return user;
 }
 
+// The SURA economy is not enabled for writes. Read-only ledger views must be
+// scoped to the authenticated account and must never infer a demo balance.
+async function readMyWallets(request, env) {
+  const me = await currentUser(request, env);
+  const { results: balances } = await env.DB.prepare(`SELECT w.wallet_type,
+      w.currency, COALESCE(SUM(l.amount_units), 0) AS balance_units,
+      COUNT(l.id) AS ledger_entries
+    FROM wallets w LEFT JOIN wallet_ledger l ON l.wallet_id = w.id
+    WHERE w.user_id = ?
+    GROUP BY w.id, w.wallet_type, w.currency
+    ORDER BY CASE w.wallet_type WHEN 'main' THEN 1
+      WHEN 'salary' THEN 2 WHEN 'seller' THEN 3 ELSE 4 END`).bind(me.id).all();
+  const { results: history } = await env.DB.prepare(`SELECT w.wallet_type, l.amount_units,
+      l.operation, l.created_at
+    FROM wallet_ledger l JOIN wallets w ON w.id = l.wallet_id
+    WHERE w.user_id = ?
+    ORDER BY l.created_at DESC, l.id DESC LIMIT 20`).bind(me.id).all();
+  const safeAmount = value => Number.isSafeInteger(Number(value)) ? Number(value) : null;
+  return json({
+    wallets: (balances || []).map(r => ({
+      wallet_type: r.wallet_type, currency: r.currency,
+      balance_units: safeAmount(r.balance_units),
+      ledger_entries: safeAmount(r.ledger_entries)
+    })),
+    entries: (history || []).map(r => ({
+      wallet_type: r.wallet_type, amount_units: safeAmount(r.amount_units),
+      operation: r.operation, created_at: r.created_at
+    })),
+    transactions_enabled: false
+  });
+}
+
 // Public profiles expose no email, session, wallet or private moderation data.
 async function memberProfile(request, env, publicId) {
   const me = await currentUser(request, env);
@@ -1094,6 +1126,7 @@ export default {
       if (path === '/api/v1/me/reports') return await listMyReports(request, env);
       if (path === '/api/v1/staff/access') return await reportStaffAccess(request, env);
       if (path === '/api/v1/staff/reports') return await listReviewQueue(request, env, url);
+      if (path === '/api/v1/me/wallets') return await readMyWallets(request, env);
       if (path === '/api/v1/me') {
         const user = await currentUser(request, env);
         return json({ user: { public_id: user.public_id.replace(/^SC(?=\d+$)/, ''), display_name: user.display_name,
