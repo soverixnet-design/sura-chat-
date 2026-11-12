@@ -1,0 +1,37 @@
+name: Publish SURA 0.5.10 Session and Room TEST APK
+on:
+  push:
+    branches: [feature/sura-session-room-safe-20261112]
+    paths: ['.github/workflows/sura-session-room-release.yml']
+permissions:
+  contents: write
+  actions: read
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Require successful API checks and Android debug build
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          test "$(gh run view 43273114589 --repo "$GITHUB_REPOSITORY" --json conclusion --jq '.conclusion')" = success
+          test "$(gh run view 43273114650 --repo "$GITHUB_REPOSITORY" --json conclusion --jq '.conclusion')" = success
+      - name: Download the exact verified v0.5.10 APK
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p out
+          gh run download 43273114650 --repo "$GITHUB_REPOSITORY" --name sura-chat-debug-unverified --dir out
+          mv out/app-debug.apk out/SURA_CHAT_Royal_3D_v0.5.10_Session_Room_Staging.apk
+          printf '%s  %s\n' 'fa5dcd439fc0bf25d27b4fd3e30873a462b4e235030704035482055523288581' 'out/SURA_CHAT_Royal_3D_v0.5.10_Session_Room_Staging.apk' | sha256sum -c -
+      - name: Publish public pre-release with direct browser APK
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create sura-chat-v0.5.10-staging             'out/SURA_CHAT_Royal_3D_v0.5.10_Session_Room_Staging.apk#SURA CHAT Royal 3D v0.5.10 TEST APK'             --repo "$GITHUB_REPOSITORY"             --target '260a53db3473e194e6eed447ca255aa99fd6db15'             --title 'SURA CHAT v0.5.10 — Login + Safe Room Exit (TEST APK)'             --notes 'TEST-ONLY Android debug APK. Includes profile photo/room avatar, owner/admin room tools, stable seats and room exit, and new optional remembered login up to 7 days with live session verification. Prevents late 401 from logging out a newer account and leaves active room before logout. API and debug build checks passed. Android Keystore review and physical two-phone voice/login/background audio QA still needed. No public Play Store release or production deployment.'             --prerelease
+      - name: Confirm direct Android APK link
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view sura-chat-v0.5.10-staging --repo "$GITHUB_REPOSITORY" --json tagName,isPrerelease,assets,url
