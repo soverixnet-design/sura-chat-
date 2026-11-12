@@ -200,6 +200,16 @@ nav button b img{display:block;margin:0 auto 2px;filter:drop-shadow(0 2px 3px #0
 
 #room .rbar [data-act=voice]{min-width:40%;border-radius:14px;background:linear-gradient(145deg,#4d239d,#231450);color:#ffdc86;border:1px solid #a784da}
 #room .rbar #voiceLabel{font-size:11px;display:block}
+#room #roomManagePanel{position:absolute;top:65px;bottom:78px;left:12px;right:12px;z-index:15;overflow:auto;border:1px solid #d9a032;border-radius:18px;padding:12px;background:linear-gradient(145deg,#33136f,#13092f);box-shadow:0 18px 40px #000c}
+#room #roomManagePanel[hidden]{display:none!important}
+#room #roomManageButton[hidden]{display:none!important}
+#room .manage-row{display:flex;justify-content:space-between;align-items:center;gap:6px;margin:7px 0;padding:8px;background:#271052;border-radius:12px;border:1px solid #ffd36a55}
+#room .manage-row small{color:var(--mut)}
+#room .manage-actions{display:flex;flex-wrap:wrap;gap:5px;justify-content:flex-end}
+#room .manage-actions button,#room #roomManagePanel button{font:600 11px inherit;min-height:30px;padding:4px 9px;border:1px solid #d9a03288;color:var(--tx);background:#4a238c;border-radius:12px}
+#room #roomManagePanel form{display:grid;gap:6px}
+#room #roomManagePanel input,#room #roomManagePanel textarea,#room #roomManagePanel select{width:100%;border-radius:10px;background:#1a0d3f;border:1px solid #bc8ede;padding:8px;color:var(--tx)}
+#room #roomManagePanel h4{color:var(--g1);margin:10px 0 4px}
 #room .voice-audio{position:absolute;width:1px;height:1px;overflow:hidden;opacity:0;pointer-events:none}
 #room .voice-connection{margin:1px 12px 7px;padding:4px 9px;border-radius:10px;color:#e4c8ff;background:#1b103dcc;font-size:11px;min-height:22px;text-align:center}
 </style></head><body>
@@ -207,7 +217,8 @@ nav button b img{display:block;margin:0 auto 2px;filter:drop-shadow(0 2px 3px #0
  <header id="header" hidden><span class="ic">✦</span><div class="logo">SURA CHAT</div><small style="color:#ffe08a">STAGING</small></header>
  <main id="main" hidden></main><nav id="nav" hidden></nav>
  <section id="room" hidden>
-  <div class="rtop"><div><span class="live">LIVE</span><h3 id="roomName"></h3><small id="roomInfo"></small></div><button class="gold" data-act="leave">Exit</button></div>
+  <div class="rtop"><div><span class="live">LIVE</span><h3 id="roomName"></h3><small id="roomInfo"></small></div><div style="display:flex;gap:6px"><button id="roomManageButton" class="gold" data-act="roomManage" hidden>Manage</button><button class="gold" data-act="leave">Exit</button></div></div>
+  <div id="roomManagePanel" hidden aria-label="Room management tools"></div>
   <div id="seats" class="seats"></div>
   <div class="ann">📢 <span id="announcement"></span></div>
   <div id="chat" class="chat" aria-live="polite"></div>
@@ -223,7 +234,7 @@ nav button b img{display:block;margin:0 auto 2px;filter:drop-shadow(0 2px 3px #0
 "use strict";
 (function(){
  const API="https://sura-chat-api-staging.soverixnet.workers.dev";
- const S={token:"",user:null,tab:"home",signup:false,rooms:[],moments:[],threads:[],scope:"all",sort:"popular",roomId:"",seatSig:"",after:0,poll:null,heartbeatTimer:null,heartbeatUnsupported:false,roomSyncPromise:null,roomGeneration:0,busy:false,peer:"",peerName:"",dm:[],voice:{meeting:null,roomId:"",role:"",busy:false,generation:0}};
+ const S={token:"",user:null,tab:"home",signup:false,rooms:[],moments:[],threads:[],scope:"all",sort:"popular",roomId:"",seatSig:"",after:0,poll:null,heartbeatTimer:null,heartbeatUnsupported:false,roomSyncPromise:null,roomGeneration:0,roomManage:null,busy:false,peer:"",peerName:"",dm:[],voice:{meeting:null,roomId:"",role:"",busy:false,generation:0}};
  const E=id=>document.getElementById(id);
  const safe=v=>String(v==null?"":v).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
  const fmt=v=>Number(v||0).toLocaleString("en-US");
@@ -234,7 +245,7 @@ nav button b img{display:block;margin:0 auto 2px;filter:drop-shadow(0 2px 3px #0
   try{const r=await fetch(API+path,{method,headers,body:payload===undefined?undefined:JSON.stringify(payload),signal:c.signal,cache:"no-store"});const j=await r.json().catch(()=>({error:"invalid_response"}));if(!r.ok){if(r.status===401&&S.token)showLogin();throw Error(j.error||"HTTP "+r.status);}return j;}
   catch(e){throw Error(e.name==="AbortError"?"Connection timeout":e instanceof TypeError?"network_unavailable":e.message);}finally{clearTimeout(timer);}
  }
- function showLogin(){void stopVoice();clearInterval(S.poll);clearInterval(S.heartbeatTimer);S.poll=null;S.heartbeatTimer=null;S.roomGeneration++;S.roomSyncPromise=null;S.roomId="";S.token="";S.user=null;S.signup=false;E("header").hidden=E("main").hidden=E("nav").hidden=true;E("room").hidden=true;E("room").classList.remove("show");E("login").hidden=false;authForm();}
+ function showLogin(){void stopVoice();clearInterval(S.poll);clearInterval(S.heartbeatTimer);S.poll=null;S.heartbeatTimer=null;S.roomGeneration++;S.roomSyncPromise=null;S.roomManage=null;S.roomId="";S.token="";S.user=null;S.signup=false;E("header").hidden=E("main").hidden=E("nav").hidden=true;E("room").hidden=true;E("room").classList.remove("show");E("login").hidden=false;authForm();}
  function authMessage(error,signup){
   const code=String(error&&error.message||"unknown");
   if(code==="invalid_credentials")return "Email or password is incorrect. If this is your first time in SURA CHAT, choose Sign Up.";
@@ -298,7 +309,8 @@ nav button b img{display:block;margin:0 auto 2px;filter:drop-shadow(0 2px 3px #0
  }
  function endLocalRoom(message){
    void stopVoice();clearInterval(S.poll);clearInterval(S.heartbeatTimer);
-   S.poll=null;S.heartbeatTimer=null;S.roomGeneration++;S.roomSyncPromise=null;S.roomId="";
+   S.poll=null;S.heartbeatTimer=null;S.roomGeneration++;S.roomSyncPromise=null;S.roomManage=null;S.roomId="";
+   E("roomManagePanel").hidden=true;E("roomManageButton").hidden=true;
    E("room").hidden=true;E("room").classList.remove("show");
    toast(message);go("rooms");
  }
@@ -453,7 +465,8 @@ nav button b img{display:block;margin:0 auto 2px;filter:drop-shadow(0 2px 3px #0
    // Only join on an authenticated server acknowledgement. No auto-sitting.
    await api("/api/v1/rooms/"+id+"/join","POST",{});
    S.roomId=id;S.roomGeneration++;S.roomSyncPromise=null;
-   S.heartbeatUnsupported=false;S.after=0;S.seatSig="";
+   S.heartbeatUnsupported=false;S.after=0;S.seatSig="";S.roomManage=null;
+   E("roomManagePanel").hidden=true;E("roomManageButton").hidden=true;
    E("chat").textContent="";E("seats").textContent="";
    voiceStatus("Join Voice");voiceNet("Tap Join Voice to listen");
    E("room").hidden=false;E("room").classList.add("show");
@@ -463,6 +476,7 @@ nav button b img{display:block;margin:0 auto 2px;filter:drop-shadow(0 2px 3px #0
    S.heartbeatTimer=setInterval(()=>{void heartbeat();},25000);
    void heartbeat();
    void syncRoom().catch(e=>toast("Room loading: "+e.message));
+   void loadRoomManage(false);
   }catch(e){toast("Cannot enter room: "+e.message);}
   finally{S.busy=false;}
  }
@@ -489,6 +503,7 @@ nav button b img{display:block;margin:0 auto 2px;filter:drop-shadow(0 2px 3px #0
    E("announcement").textContent=a.room.announcement||"No announcement";
    const sig=stableSeatSignature(a.seats);
    if(sig!==S.seatSig){
+    S.lastRoomSeats=a.seats;
     S.seatSig=sig;
     E("seats").innerHTML=a.seats.map(s=>'<button class="seat" data-act="'+(s.public_id?'member':'seat')+'" data-id="'+safe(s.public_id||"")+'" data-n="'+Number(s.seat_number)+'"><div class="av">'+(s.is_locked?'🔒':s.public_id?'👤':'＋')+'</div><small>'+safe(s.display_name||(s.is_locked?'Locked':'Open'))+'</small><small>'+Number(s.seat_number)+'</small></button>').join("");
    }
@@ -514,7 +529,8 @@ nav button b img{display:block;margin:0 auto 2px;filter:drop-shadow(0 2px 3px #0
   const id=S.roomId,session=S.token;
   S.roomId="";S.roomGeneration++;S.roomSyncPromise=null;
   clearInterval(S.poll);clearInterval(S.heartbeatTimer);
-  S.poll=null;S.heartbeatTimer=null;S.seatSig="";
+  S.poll=null;S.heartbeatTimer=null;S.seatSig="";S.roomManage=null;
+  E("roomManagePanel").hidden=true;E("roomManageButton").hidden=true;
   // Hide and navigate locally immediately; stopVoice closes audio independently.
   void stopVoice();
   E("room").hidden=true;E("room").classList.remove("show");
@@ -531,6 +547,80 @@ nav button b img{display:block;margin:0 auto 2px;filter:drop-shadow(0 2px 3px #0
    }
   }
  }
+
+ async function loadRoomManage(openPanel){
+  const id=S.roomId;if(!id)return;
+  try{
+   const data=await api("/api/v1/rooms/"+id+"/manage");
+   if(S.roomId!==id)return;
+   S.roomManage=data;
+   E("roomManageButton").hidden=false;
+   if(openPanel)E("roomManagePanel").hidden=false;
+   if(!E("roomManagePanel").hidden)renderRoomManage();
+  }catch(error){
+   if(S.roomId!==id)return;
+   if(error.message==="room_moderator_required"){
+    S.roomManage=null;
+    E("roomManageButton").hidden=true;E("roomManagePanel").hidden=true;
+   }else if(openPanel)toast("Room management: "+error.message);
+  }
+ }
+ function renderRoomManage(){
+  const data=S.roomManage,host=E("roomManagePanel");
+  if(!data||!data.room)return;
+  const owner=data.my_permission==="owner",room=data.room;
+  let out='<div class="manage-row"><b>Room Tools · '+safe(data.my_permission)+'</b><button data-act="closeRoomManage">Close</button></div>';
+  if(owner){
+   out+='<h4>Room settings</h4><form id="roomSettingsForm">'
+    +'<label>Room name<input name="name" maxlength="64" minlength="3" required value="'+safe(room.name)+'"></label>'
+    +'<label>Announcement<textarea name="announcement" maxlength="400">'+safe(room.announcement||"")+'</textarea></label>'
+    +'<label>Room access<select name="status"><option value="open"'+(room.status==="open"?' selected':'')+'>Open</option><option value="locked"'+(room.status==="locked"?' selected':'')+'>Locked</option></select></label>'
+    +'<label>Seats<select name="seat_count">'+[4,8,12,16].map(n=>'<option value="'+n+'"'+(Number(room.seat_count)===n?' selected':'')+'>'+n+'</option>').join("")+'</select></label>'
+    +'<button class="gold" type="submit">Save Room Settings</button></form>';
+  }
+  out+='<h4>Seats (only empty seats can be locked)</h4>';
+  const seatState=S.lastRoomSeats||[];
+  out+='<div class="manage-row" style="display:flex;flex-wrap:wrap">';
+  out+=seatState.filter(s=>!s.public_id).map(s=>'<button data-act="roomSeatLock" data-n="'+Number(s.seat_number)+'" data-value="'+(s.is_locked?'unlock':'lock')+'">'+(s.is_locked?'🔓 Unlock ':'🔒 Lock ')+Number(s.seat_number)+'</button>').join("")||'<small>All seats occupied or waiting for room data.</small>';
+  out+='</div><h4>Active members</h4>';
+  out+=(data.members||[]).map(m=>{
+   const target=String(m.public_id||"");const isSelf=target===String(data.my_id);
+   const protectedUser=isSelf||m.permission==="owner"||(!owner&&m.permission==="admin");
+   return '<div class="manage-row"><div><b>'+safe(m.display_name)+'</b><small> · '+safe(target)+' · '+safe(m.permission)+'</small></div>'
+    +(protectedUser?'':('<div class="manage-actions"><button data-act="roomMemberAction" data-value="kick" data-id="'+safe(target)+'">Kick</button><button data-act="roomMemberAction" data-value="block" data-id="'+safe(target)+'">Block</button>'
+      +(owner?'<button data-act="roomAdminToggle" data-value="'+(m.permission==="admin"?'false':'true')+'" data-id="'+safe(target)+'">'+(m.permission==="admin"?'Remove admin':'Make admin')+'</button>':'')+'</div>'))+'</div>';
+  }).join("");
+  if(data.bans&&data.bans.length){
+   out+='<h4>Blocked members</h4>'+(data.bans||[]).map(m=>'<div class="manage-row"><span>'+safe(m.display_name)+' · '+safe(m.public_id)+'</span><button data-act="roomMemberAction" data-value="unblock" data-id="'+safe(m.public_id)+'">Unblock</button></div>').join("");
+  }
+  host.innerHTML=out;
+ }
+ async function doRoomMemberAction(action,id){
+  if(!S.roomId||!S.roomManage||!["kick","block","unblock"].includes(action)||!id)return;
+  if(!confirm(action.toUpperCase()+" member "+id+"?"))return;
+  const room=S.roomId;
+  await api("/api/v1/rooms/"+room+"/"+action,"POST",{public_id:id});
+  if(S.roomId!==room)return;
+  toast("Member "+action+" completed");
+  await loadRoomManage(true);
+  await syncRoom();
+ }
+ async function doRoomSeatLock(number,action){
+  if(!S.roomId||!S.roomManage||!Number.isInteger(number)||!["lock","unlock"].includes(action))return;
+  const room=S.roomId;
+  await api("/api/v1/rooms/"+room+"/seats/"+number+"/"+action,"POST",{});
+  if(S.roomId!==room)return;
+  await syncRoom();
+  renderRoomManage();
+  toast("Seat "+number+" "+(action==="lock"?"locked":"unlocked"));
+ }
+ async function doRoomAdminToggle(id,enabled){
+  if(!S.roomId||!S.roomManage||S.roomManage.my_permission!=="owner")return;
+  if(!confirm((enabled?"Assign":"Remove")+" room admin "+id+"?"))return;
+  const room=S.roomId;
+  await api("/api/v1/rooms/"+room+"/moderators","POST",{public_id:id,enabled});
+  if(S.roomId===room)await loadRoomManage(true);
+ }
  async function openDm(id){if(!/^\d{7}$/.test(id))return toast("Invalid member ID");const r=await api("/api/v1/messages/"+id);S.peer=id;S.peerName=(r.peer && r.peer.display_name)||id;S.dm=r.messages||[];S.tab="dm";nav();render();}
  document.addEventListener("click",async e=>{const el=e.target.closest("[data-act]");if(!el)return;try{const a=el.dataset.act;
   if(a==="authTab"){S.signup=el.dataset.value==="signup";authForm();}
@@ -541,6 +631,11 @@ nav button b img{display:block;margin:0 auto 2px;filter:drop-shadow(0 2px 3px #0
   else if(a==="seat"){await api("/api/v1/rooms/"+S.roomId+"/seats/"+el.dataset.n,"POST",{});await syncRoom();if(S.voice.meeting){await stopVoice();await joinVoice();}}
   else if(a==="stand"){await stopVoice();await api("/api/v1/rooms/"+S.roomId+"/stand","POST",{});await syncRoom();}
   else if(a==="member"){const r=await api("/api/v1/users/"+el.dataset.id);if(confirm(r.user.display_name+" · ID "+el.dataset.id+"\nOpen chat?")){await leave();await openDm(el.dataset.id);}}
+  else if(a==="roomManage"){if(E("roomManagePanel").hidden)await loadRoomManage(true);else E("roomManagePanel").hidden=true;}
+  else if(a==="closeRoomManage"){E("roomManagePanel").hidden=true;}
+  else if(a==="roomMemberAction")await doRoomMemberAction(el.dataset.value,el.dataset.id);
+  else if(a==="roomSeatLock")await doRoomSeatLock(Number(el.dataset.n),el.dataset.value);
+  else if(a==="roomAdminToggle")await doRoomAdminToggle(el.dataset.id,el.dataset.value==="true");
   else if(a==="voice")await joinVoice();
   else if(a==="catalog"){if(S.roomId)void leave("catalog");else go("catalog");}
   else if(a==="openDm")await openDm(el.dataset.id);
@@ -550,6 +645,7 @@ nav button b img{display:block;margin:0 auto 2px;filter:drop-shadow(0 2px 3px #0
   try{
    if(form.id==="authForm"){const payload={email:String(d.get("email")).trim(),password:String(d.get("password"))};if(S.signup){payload.display_name=String(d.get("display_name")).trim();payload.country_code=String(d.get("country_code")).trim().toUpperCase();}if(btn)btn.textContent=S.signup?"Creating account…":"Signing in…";const r=await api(S.signup?"/api/v1/auth/signup":"/api/v1/auth/login","POST",payload);if(!r||typeof r.token!=="string"||!r.user||!r.user.public_id)throw Error("invalid_response");S.token=r.token;S.user=r.user;startApp();toast("Welcome to SURA CHAT");}
    else if(form.id==="createRoom"){await api("/api/v1/rooms","POST",{name:String(d.get("name")).trim(),seat_count:Number(d.get("seat_count"))});toast("Room created");go("rooms");}
+   else if(form.id==="roomSettingsForm"){const room=S.roomId;if(!room||!S.roomManage||S.roomManage.my_permission!=="owner")throw Error("Owner only");await api("/api/v1/rooms/"+room+"/settings","POST",{name:String(d.get("name")).trim(),announcement:String(d.get("announcement")).trim(),status:String(d.get("status")),seat_count:Number(d.get("seat_count"))});if(S.roomId===room){await loadRoomManage(true);await syncRoom();toast("Room settings saved");}}
    else if(form.id==="chatForm"){await api("/api/v1/rooms/"+S.roomId+"/messages","POST",{message:String(d.get("message")).trim()});form.reset();await syncRoom();}
    else if(form.id==="newMoment"){await api("/api/v1/moments","POST",{body:String(d.get("body")).trim()});toast("Moment posted");go("moments");}
    else if(form.id==="findDm")await openDm(String(d.get("id")));
