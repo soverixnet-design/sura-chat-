@@ -1,6 +1,10 @@
 package com.soverixnet.surachat;
 
 import android.app.Activity;
+import android.content.Intent;
+import android.content.ActivityNotFoundException;
+import android.net.Uri;
+import android.webkit.ValueCallback;
 import android.Manifest;
 import android.content.pm.PackageManager;
 import android.webkit.PermissionRequest;
@@ -25,10 +29,12 @@ import android.widget.TextView;
  */
 public final class RoyalWebActivity extends Activity {
     private static final int AUDIO_PERMISSION_CODE = 2046;
+    private static final int AVATAR_PICKER_CODE = 2047;
     private static final String APP_URL =
         "https://appassets.androidplatform.net/assets/sura-chat.html";
     private WebView webView;
     private PermissionRequest pendingAudioRequest;
+    private ValueCallback<Uri[]> pendingAvatarPicker;
 
     // Only the local, bundled design may request AUDIO_CAPTURE. Never grant
     // camera, protected media or untrusted iframe origins.
@@ -70,6 +76,25 @@ public final class RoyalWebActivity extends Activity {
         }
     }
 
+    @Override protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode,resultCode,data);
+        if (requestCode != AVATAR_PICKER_CODE) return;
+        ValueCallback<Uri[]> callback = pendingAvatarPicker;
+        pendingAvatarPicker = null;
+        if (callback == null) return;
+        Uri selected = resultCode == RESULT_OK && data != null ? data.getData() : null;
+        if (selected == null || !"content".equals(selected.getScheme())) {
+            callback.onReceiveValue(null);
+            return;
+        }
+        String mime = getContentResolver().getType(selected);
+        if (mime == null || !mime.startsWith("image/")) {
+            callback.onReceiveValue(null);
+            return;
+        }
+        callback.onReceiveValue(new Uri[]{selected});
+    }
+
     @Override public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         getWindow().setStatusBarColor(Color.rgb(18, 10, 42));
@@ -89,7 +114,7 @@ public final class RoyalWebActivity extends Activity {
             settings.setJavaScriptEnabled(true);
             settings.setDomStorageEnabled(false);
             settings.setAllowFileAccess(false);
-            settings.setAllowContentAccess(false);
+            settings.setAllowContentAccess(true); // Required for explicit user-selected gallery content:// URI only.
             settings.setAllowFileAccessFromFileURLs(false);
             settings.setAllowUniversalAccessFromFileURLs(false);
             settings.setJavaScriptCanOpenWindowsAutomatically(false);
@@ -123,12 +148,37 @@ public final class RoyalWebActivity extends Activity {
                         pendingAudioRequest = null;
                     }
                     webView = null;
+                    if (pendingAvatarPicker != null) {
+                        pendingAvatarPicker.onReceiveValue(null);
+                        pendingAvatarPicker = null;
+                    }
                     view.destroy();
                     showError("SURA CHAT browser restarted. Reopen the app to reconnect.");
                     return true;
                 }
             });
             webView.setWebChromeClient(new WebChromeClient() {
+                @Override public boolean onShowFileChooser(WebView webView, ValueCallback<Uri[]> callback,
+                    WebChromeClient.FileChooserParams params) {
+                    if (webView != RoyalWebActivity.this.webView ||
+                        !APP_URL.equals(webView.getUrl()) || isFinishing() || isDestroyed()) {
+                        callback.onReceiveValue(null);
+                        return true;
+                    }
+                    if (pendingAvatarPicker != null) pendingAvatarPicker.onReceiveValue(null);
+                    pendingAvatarPicker = callback;
+                    Intent intent = new Intent(Intent.ACTION_GET_CONTENT);
+                    intent.setType("image/*");
+                    intent.addCategory(Intent.CATEGORY_OPENABLE);
+                    try {
+                        startActivityForResult(Intent.createChooser(intent, "Choose profile photo"), AVATAR_PICKER_CODE);
+                        return true;
+                    } catch (ActivityNotFoundException e) {
+                        pendingAvatarPicker = null;
+                        callback.onReceiveValue(null);
+                        return true;
+                    }
+                }
                 @Override public void onPermissionRequest(PermissionRequest request) {
                     runOnUiThread(() -> handleWebAudioPermission(request));
                 }
@@ -169,6 +219,10 @@ public final class RoyalWebActivity extends Activity {
         if (pendingAudioRequest != null) {
             pendingAudioRequest.deny();
             pendingAudioRequest = null;
+        }
+        if (pendingAvatarPicker != null) {
+            pendingAvatarPicker.onReceiveValue(null);
+            pendingAvatarPicker = null;
         }
         if (webView != null) {
             webView.destroy();

@@ -8,8 +8,8 @@ android {
         minSdk 26
         targetSdk 35
         testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
-        versionCode 12
-        versionName '0.5.7-room-manager-staging'
+        versionCode 13
+        versionName '0.5.8-avatar-sync-staging'
     }
     buildTypes {
         debug {

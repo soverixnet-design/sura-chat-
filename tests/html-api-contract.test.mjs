@@ -72,3 +72,27 @@ test('room exit closes immediately, retries server exit and avoids stale same-ro
  assert.match(html, /if\(S\.roomId!==id&&S\.token===session\)/);
  assert.match(html, /if\(S\.roomId\)void leave\(el\.dataset\.value\);else go/);
 });
+
+
+test('SURA profile photo uses real R2 WebP endpoint and in-room seat avatar updates',()=>{
+ assert.match(html, /id="avatarFile"/);
+ assert.match(html, /data-act="saveAvatar"/);
+ assert.match(html, /function avatarUrl\(user\)/);
+ assert.match(html, /\/api\/v1\/users\/"\+encodeURIComponent\(id\)\+"\/avatar/);
+ assert.match(html, /async function makeAvatarWebp\(file\)/);
+ assert.match(html, /canvas\.toBlob\(resolve,"image\/webp",quality\)/);
+ assert.match(html, /blob\.size<=256000/);
+ assert.match(html, /async function saveAvatar\(\)/);
+ assert.match(html, /\/api\/v1\/me\/avatar/);
+ assert.match(html, /"Content-Type":"image\/webp"/);
+ assert.match(html, /S\.user\.avatar_key=result\.avatar_key/);
+ assert.match(html, /String\(s\.avatar_key\|\|""\)/);
+ assert.match(html, /avatarHtml\(s\)/);
+ assert.match(java, /onShowFileChooser\(/);
+ assert.match(java, /ACTION_GET_CONTENT/);
+ assert.match(java, /AVATAR_PICKER_CODE/);
+ assert.match(java, /pendingAvatarPicker\.onReceiveValue\(null\)/);
+ assert.match(java, /"content"\.equals\(selected\.getScheme\(\)\)/);
+ assert.match(java, /mime\.startsWith\("image\/"\)/);
+ assert.doesNotMatch(java, /ACTION_GET_MULTIPLE_CONTENTS/);
+});
