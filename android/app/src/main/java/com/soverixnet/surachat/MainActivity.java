@@ -35,6 +35,7 @@ public final class MainActivity extends Activity {
     private String activeRoomName = "";
     private String view = "login";
     private boolean returningFromRoom = false;
+    private boolean joinInFlight = false;
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
@@ -127,6 +128,7 @@ public final class MainActivity extends Activity {
         notifyUser((code == 0 ? "Network: " : "HTTP " + code + " · ") + data.optString("error", "request_failed"));
     }
     private String typed(EditText e) { return e.getText().toString().trim(); }
+
 
     private void showAuth(boolean register) {
         view = "login";
@@ -301,7 +303,12 @@ public final class MainActivity extends Activity {
     }
 
     private void joinRoom(String roomId, String title, String roomCountry) {
+        if (joinInFlight) return;
+        joinInFlight = true;
+        notifyUser("Entering " + title + "…");
         api.post("/api/v1/rooms/" + roomId + "/join", new JSONObject(), (code, body) -> {
+            joinInFlight = false;
+            if (isFinishing() || isDestroyed()) return;
             if (code != 200) { error(code, body); return; }
             openRoom(roomId, title, roomCountry);
         });
