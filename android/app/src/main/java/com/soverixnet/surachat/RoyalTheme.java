@@ -63,8 +63,10 @@ public final class RoyalTheme {
         sub.setMaxLines(3);
         words.addView(sub);
         body.addView(words,new LinearLayout.LayoutParams(0,-2,1));
-        body.addView(RoyalIcons.view(c,drawable,100,"✦"),
-            new LinearLayout.LayoutParams(dp(c,100),dp(c,109)));
+        String artwork = "sura_voice_support".equals(drawable) ? "sura_royal_hero" : drawable;
+        int artWidth = "sura_royal_hero".equals(artwork) ? 128 : 100;
+        body.addView(RoyalIcons.view(c,artwork,artWidth,"✦"),
+            new LinearLayout.LayoutParams(dp(c,artWidth),dp(c,109)));
         return body;
     }
     public static LinearLayout title(Context c, String name, String hint) {
