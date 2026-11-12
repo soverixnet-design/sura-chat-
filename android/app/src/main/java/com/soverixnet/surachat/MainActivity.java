@@ -249,16 +249,22 @@ public final class MainActivity extends Activity {
             12,MUTED,false));
         EditText name = register ? field(form,"Nickname (2–40 characters)",InputType.TYPE_CLASS_TEXT,"") : null;
         EditText email = field(form,"Email address",InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS,"");
-        EditText pin = field(form, register?"8-digit numeric password":"Password",
-                register?(InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_VARIATION_PASSWORD):
-                         (InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD),"");
+        EditText pin = field(form, register?"Password (10–64 chars: letters + numbers)":"Password",
+                InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD,"");
         EditText region = register ? field(form,"Country code (BD, OM, IN…)",InputType.TYPE_CLASS_TEXT,country) : null;
         Button submit = goldAction(register?"Create account":"Sign in",null);
         form.addView(submit);
         submit.setOnClickListener(v -> {
             try {
+                String password=pin.getText().toString();
+                if(register && (password.length()<10 || password.length()>64 ||
+                        !password.matches("(?s).*[A-Za-z].*") ||
+                        !password.matches("(?s).*[0-9].*"))) {
+                    notifyUser("Use 10–64 characters including letters and numbers.");
+                    return;
+                }
                 JSONObject payload = new JSONObject()
-                    .put("email",typed(email)).put("password",typed(pin));
+                    .put("email",typed(email)).put("password",password);
                 if (register) payload.put("display_name",typed(name))
                     .put("country_code",typed(region).toUpperCase(java.util.Locale.ROOT));
                 submit.setEnabled(false);
