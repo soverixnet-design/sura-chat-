@@ -575,12 +575,80 @@ public final class RoomActivity extends Activity {
             owner = "owner".equals(json.optString("my_permission"));
             JSONObject room = json.optJSONObject("room");
             if (room == null) return;
-            if (!owner) {
-                info("Moderator controls", "Long-press an empty seat to lock or unlock it. Tap a member for kick/block tools. Only the owner changes room settings.");
-                return;
-            }
-            showSettingsEditor(room);
+            String[] choices = owner
+                ? new String[]{"Edit room name, seats, announcement and lock",
+                    "Assign room moderator", "Remove room moderator",
+                    "Unblock member", "View active members", "View blocked members"}
+                : new String[]{"Moderator tools guide", "Unblock member",
+                    "View active members", "View blocked members"};
+            new AlertDialog.Builder(this)
+                .setTitle(owner ? "Owner · Room Management" : "Room Moderator")
+                .setItems(choices, (dialog, selected) -> {
+                    String item = choices[selected];
+                    if (item.startsWith("Edit room")) showSettingsEditor(room);
+                    else if (item.equals("Assign room moderator")) memberIdAction("assign");
+                    else if (item.equals("Remove room moderator")) memberIdAction("remove");
+                    else if (item.equals("Unblock member")) memberIdAction("unblock");
+                    else if (item.equals("View active members")) showMemberList(json.optJSONArray("members"));
+                    else if (item.equals("View blocked members")) showMemberList(json.optJSONArray("bans"));
+                    else info("Moderator controls", "Tap an occupied seat to view a member or kick/block them. Long-press an empty seat to lock or unlock it.");
+                }).show();
         });
+    }
+
+    private void showMemberList(JSONArray people) {
+        if (people == null || people.length() == 0) {
+            info("Room members", "No members found in this list.");
+            return;
+        }
+        StringBuilder listing = new StringBuilder();
+        for (int i = 0; i < people.length(); i++) {
+            JSONObject p = people.optJSONObject(i);
+            if (p == null) continue;
+            listing.append("✦ ").append(p.optString("display_name", "User"))
+                   .append("  #").append(p.optString("public_id", ""))
+                   .append("  ").append(p.optString("permission", ""))
+                   .append("\n");
+        }
+        info("Room members", listing.toString());
+    }
+
+    private void memberIdAction(String actionType) {
+        EditText memberId = new EditText(this);
+        memberId.setInputType(InputType.TYPE_CLASS_NUMBER);
+        memberId.setHint("7-digit member ID");
+        memberId.setSingleLine(true);
+        memberId.setFilters(new InputFilter[]{new InputFilter.LengthFilter(8)});
+        String title = "assign".equals(actionType) ? "Assign room moderator" :
+                       "remove".equals(actionType) ? "Remove room moderator" : "Unblock member";
+        AlertDialog dialog = new AlertDialog.Builder(this)
+                .setTitle(title).setView(memberId)
+                .setNegativeButton("Cancel", null).setPositiveButton("Confirm", null).create();
+        dialog.setOnShowListener(ignored -> dialog.getButton(DialogInterface.BUTTON_POSITIVE).setOnClickListener(v -> {
+            String id = memberId.getText().toString().trim();
+            if (!id.matches("[0-9]{7,8}")) { toast("Enter a valid member ID"); return; }
+            try {
+                JSONObject body = new JSONObject().put("public_id", id);
+                String path;
+                if ("unblock".equals(actionType)) {
+                    path = "/api/v1/rooms/" + roomId + "/unblock";
+                } else {
+                    path = "/api/v1/rooms/" + roomId + "/moderators";
+                    body.put("enabled", "assign".equals(actionType));
+                }
+                dialog.getButton(DialogInterface.BUTTON_POSITIVE).setEnabled(false);
+                api.post(path, body, (code, json) -> {
+                    dialog.getButton(DialogInterface.BUTTON_POSITIVE).setEnabled(true);
+                    if (code != 200) showError(code, json);
+                    else {
+                        dialog.dismiss();
+                        toast(title + " · done");
+                        checkModerationSilently();
+                    }
+                });
+            } catch (Exception ignored) { toast("Invalid request"); }
+        }));
+        dialog.show();
     }
 
     private EditText edit(LinearLayout parent, String hint, String value) {
