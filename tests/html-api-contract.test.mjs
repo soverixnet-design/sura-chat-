@@ -72,3 +72,19 @@ test('room exit closes immediately, retries server exit and avoids stale same-ro
  assert.match(html, /if\(S\.roomId!==id&&S\.token===session\)/);
  assert.match(html, /if\(S\.roomId\)void leave\(el\.dataset\.value\);else go/);
 });
+
+
+test('stale 401 response cannot log out newer SURA account',()=>{
+ assert.match(html,/const requestToken=S\.token/);
+ assert.match(html,/r\.status===401&&requestToken&&S\.token===requestToken/);
+ assert.match(html,/j\.error==="session_expired"\|\|j\.error==="login_required"/);
+ assert.match(html,/showAuthIssue\("Session expired\. Please sign in again\."\)/);
+});
+test('logout leaves room while bearer token remains valid',()=>{
+ assert.match(html,/if\(S\.roomId\)await leave\(null\)/);
+ assert.match(html,/await api\("\/api\/v1\/auth\/logout","POST",\{\}\)/);
+});
+test('Android back closes room management panel before leaving room',()=>{
+ assert.match(html,/if\(!E\("roomManagePanel"\)\.hidden\)\{E\("roomManagePanel"\)\.hidden=true;return true;\}/);
+ assert.match(html,/if\(!E\("login"\)\.hidden\)return false/);
+});
