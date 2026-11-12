@@ -848,12 +848,15 @@ if(S.tab==="home")x.innerHTML=
   if(S.roomSyncPromise)return S.roomSyncPromise;
   const id=S.roomId,generation=S.roomGeneration;
   const task=(async()=>{
-   const [a,b]=await Promise.all([
-    api("/api/v1/rooms/"+id+"/seats"),
-    api("/api/v1/rooms/"+id+"/messages?after="+S.after)
-   ]);
+   // Start both requests together, but render seats as soon as the seat API
+   // replies. A slow message stream must not leave the voice room looking empty.
+   // Catch the chat result immediately so a seat failure causes no unhandled
+   // rejection while the next room poll retries.
+   const messageRequest=api("/api/v1/rooms/"+id+"/messages?after="+S.after)
+     .then(data=>({data}),error=>({error}));
+   const a=await api("/api/v1/rooms/"+id+"/seats");
    if(id!==S.roomId||generation!==S.roomGeneration)return;
-   if(!a||!a.room||!Array.isArray(a.seats)||!b||!Array.isArray(b.messages))throw Error("Invalid room response");
+   if(!a||!a.room||!Array.isArray(a.seats))throw Error("Invalid room response");
    E("roomName").textContent=a.room.name;
    E("roomInfo").textContent=a.room.seat_count+" seats · "+a.room.status;
    E("announcement").textContent=a.room.announcement||"No announcement";
@@ -863,6 +866,12 @@ if(S.tab==="home")x.innerHTML=
     S.seatSig=sig;
     E("seats").innerHTML=a.seats.map(s=>'<button class="seat" data-act="'+(s.public_id?'member':'seat')+'" data-id="'+safe(s.public_id||"")+'" data-n="'+Number(s.seat_number)+'"><div class="av">'+(s.is_locked?'🔒':s.public_id?avatarHtml(s):'＋')+'</div><small>'+safe(s.display_name||(s.is_locked?'Locked':'Open'))+'</small><small>'+Number(s.seat_number)+'</small></button>').join("");
    }
+   // Seat grid is visible now, regardless of the chat endpoint latency.
+   const messageResult=await messageRequest;
+   if(id!==S.roomId||generation!==S.roomGeneration)return;
+   if(messageResult.error)throw messageResult.error;
+   const b=messageResult.data;
+   if(!b||!Array.isArray(b.messages))throw Error("Invalid room response");
    for(const m of b.messages){
     const messageId=Number(m.id)||0;
     if(messageId<=S.after)continue;
