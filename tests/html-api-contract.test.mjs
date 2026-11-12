@@ -13,7 +13,7 @@ test('the bundled design matches the web source', () => {
     assert.match(html, /class="card banner"/);
 });
 test('no demo coin spending, fake users or randomized winners', () => {
-    for (const bad of ['coins:328500', "['Luna'", 'Google (demo)', 'Apple (demo)', 'Math.random()', 'localStorage.setItem', 'onclick="buy(']) {
+    for (const bad of ['coins:328500', "['Luna'", 'Google (demo)', 'Apple (demo)', 'Math.random()', 'onclick="buy(']) {
         assert.equal(html.includes(bad), false, 'demo retained: ' + bad);
     }
 });
@@ -110,4 +110,32 @@ test('logout leaves room before revoking bearer',()=>{
 test('Android back closes management panel before room and exits login activity',()=>{
  assert.match(html,/if\(!E\("roomManagePanel"\)\.hidden\)\{E\("roomManagePanel"\)\.hidden=true;return true;\}/);
  assert.match(html,/if\(!E\("login"\)\.hidden\)return false/);
+});
+
+test('SURA session persists only opted-in short-lived bearer token, not password or demo coins',()=>{
+ assert.match(html,/const AUTH_STORAGE_KEY="sura.auth.session.v1"/);
+ assert.match(html,/function readSavedLogin\(\)/);
+ assert.match(html,/localStorage.getItem\(AUTH_STORAGE_KEY\)/);
+ assert.match(html,/localStorage.setItem\(AUTH_STORAGE_KEY,JSON.stringify\(\{token,expires_at:/);
+ assert.match(html,/function forgetSavedLogin\(\)/);
+ assert.match(html,/name="remember" checked/);
+ assert.match(html,/if\(d.get\("remember"\)==="on"\)rememberLogin\(r.token,r.expires_in\);else forgetSavedLogin\(\)/);
+ assert.match(html,/async function restoreSavedLogin\(\)/);
+ assert.match(html,/fetch\(API\+"\/api\/v1\/me"/);
+ assert.match(html,/if\(res.status===401\)\{forgetSavedLogin\(\);throw Error\("session_expired"\)/);
+ assert.match(html,/showLogin\(true\)/);
+ assert.match(html,/showLogin\(\);void restoreSavedLogin\(\)/);
+ assert.match(java,/settings.setDomStorageEnabled\(true\)/);
+ assert.doesNotMatch(html,/localStorage\.setItem\(["']password/);
+ assert.doesNotMatch(html,/localStorage\.setItem\(["']coins/);
+});
+
+
+test('session persistence retains late-401 and safe room logout protections',()=>{
+ assert.match(html,/const requestToken=S\.token/);
+ assert.match(html,/r\.status===401&&requestToken&&S\.token===requestToken/);
+ assert.match(html,/showLogin\(true\);showAuthIssue\("Session expired/);
+ assert.match(html,/if\(S\.roomId\)await leave\(null\)/);
+ assert.match(html,/async function leave\(targetTab="rooms"\)/);
+ assert.match(html,/S\.authGeneration\+\+/);
 });

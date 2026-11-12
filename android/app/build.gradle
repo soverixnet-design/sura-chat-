@@ -8,8 +8,8 @@ android {
         minSdk 26
         targetSdk 35
         testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
-        versionCode 14
-        versionName '0.5.9-auth-room-exit-staging'
+        versionCode 15
+        versionName '0.5.10-session-room-safe-staging'
     }
     buildTypes {
         debug {
