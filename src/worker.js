@@ -191,6 +191,70 @@ async function reportMember(request, env) {
   return json({ submitted: true, report_id: reportId }, 201);
 }
 
+
+/**
+ * Report review is explicitly opt-in. The operator sets SURA_MODERATOR_IDS
+ * as comma-separated canonical public IDs in the dedicated SURA Worker.
+ * Never accept staff/admin privileges from a client payload or from a
+ * room-owner permission, and never fall back to a public/default ID.
+ */
+function mayReviewReports(user, env) {
+  const id = String(user.public_id || '').replace(/^SC(?=\d+$)/, '');
+  const ids = String(env.SURA_MODERATOR_IDS || '').split(',').map(v => v.trim());
+  return /^(?:[0-9]{7}|[0-9]{8})$/.test(id) && ids.includes(id);
+}
+async function requireReportModerator(request, env) {
+  const user = await currentUser(request, env);
+  if (!mayReviewReports(user, env)) throw new HttpError(403, 'moderator_required');
+  return user;
+}
+async function reportStaffAccess(request, env) {
+  const me = await currentUser(request, env);
+  return json({ moderator: mayReviewReports(me, env) });
+}
+async function listMyReports(request, env) {
+  const me = await currentUser(request, env);
+  const { results } = await env.DB.prepare(`SELECT r.id, r.reason, r.context_type, r.status, r.created_at_ms,
+    u.public_id AS target_public_id
+    FROM user_reports r JOIN users u ON u.id = r.target_user_id
+    WHERE r.reporter_user_id = ? ORDER BY r.created_at_ms DESC LIMIT 40`).bind(me.id).all();
+  return json({ reports: (results || []).map(r => ({ ...r,
+    target_public_id: r.target_public_id.replace(/^SC(?=\d+$)/, '') })) });
+}
+async function listReviewQueue(request, env, url) {
+  await requireReportModerator(request, env);
+  const status = url.searchParams.get('status') || 'open';
+  if (!['open','reviewing','resolved','dismissed'].includes(status))
+    throw new HttpError(400, 'invalid_report_status');
+  const { results } = await env.DB.prepare(`SELECT r.id, r.reason, r.details, r.context_type,
+    r.context_id, r.status, r.created_at_ms, r.review_note, r.reviewed_at_ms,
+    target.public_id AS target_public_id, target.display_name AS target_name,
+    reporter.public_id AS reporter_public_id, reporter.display_name AS reporter_name
+    FROM user_reports r JOIN users target ON target.id = r.target_user_id
+    JOIN users reporter ON reporter.id = r.reporter_user_id
+    WHERE r.status = ? ORDER BY r.created_at_ms DESC LIMIT 30`).bind(status).all();
+  return json({ status, reports: (results || []).map(r => ({
+    ...r, target_public_id: r.target_public_id.replace(/^SC(?=\d+$)/, ''),
+    reporter_public_id: r.reporter_public_id.replace(/^SC(?=\d+$)/, '')
+  })) });
+}
+async function reviewReport(request, env, reportId) {
+  const moderator = await requireReportModerator(request, env);
+  await rateLimit(request, env, 'room-staff-report-review', moderator.id);
+  const data = await readJson(request);
+  const status = String(data.status || '');
+  const note = String(data.note || '').trim();
+  if (!['reviewing','resolved','dismissed'].includes(status) || note.length > 500 ||
+      /[\x00-\x08\x0B\x0C\x0E-\x1F]/.test(note))
+    throw new HttpError(400, 'invalid_report_review');
+  const changed = await env.DB.prepare(`UPDATE user_reports
+    SET status = ?, review_note = ?, reviewed_by_user_id = ?, reviewed_at_ms = ?
+    WHERE id = ? AND status IN ('open','reviewing')`)
+    .bind(status, note, moderator.id, Date.now(), reportId).run();
+  if (changed.meta?.changes !== 1) throw new HttpError(409, 'report_not_open');
+  return json({ updated: true, report_id: reportId, status });
+}
+
 // Only the two authenticated participants can read their conversation.
 async function directConversation(request, env, publicId, url) {
   const me = await currentUser(request, env);
@@ -903,6 +967,8 @@ export default {
         if (path === '/api/v1/me/avatar') return await uploadMyAvatar(request, env);
         if (path === '/api/v1/me/blocks') return await updateMyBlocks(request, env);
         if (path === '/api/v1/reports') return await reportMember(request, env);
+        const reportReviewMatch = /^\/api\/v1\/staff\/reports\/([0-9a-f-]{36})\/review$/i.exec(path);
+        if (reportReviewMatch) return await reviewReport(request, env, reportReviewMatch[1]);
         if (path === '/api/v1/auth/logout') {
           await currentUser(request, env);
           await env.DB.prepare('UPDATE auth_sessions SET revoked_at_ms = ? WHERE token_sha256 = ?')
@@ -941,6 +1007,9 @@ export default {
       }
 
       if (path === '/api/v1/me/blocks') return await listMyBlocks(request, env);
+      if (path === '/api/v1/me/reports') return await listMyReports(request, env);
+      if (path === '/api/v1/staff/access') return await reportStaffAccess(request, env);
+      if (path === '/api/v1/staff/reports') return await listReviewQueue(request, env, url);
       if (path === '/api/v1/me') {
         const user = await currentUser(request, env);
         return json({ user: { public_id: user.public_id.replace(/^SC(?=\d+$)/, ''), display_name: user.display_name,
