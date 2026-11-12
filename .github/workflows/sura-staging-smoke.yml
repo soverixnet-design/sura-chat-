@@ -64,6 +64,18 @@ jobs:
           assert status == 200 and isinstance(data.get('rooms'), list), (status, data)
           print('OK named room search: protected SQL filter is live')
 
+          status, data = check('/api/v1/rankings/rooms?period=weekly')
+          assert status == 200, ('/api/v1/rankings/rooms', status, data)
+          assert data.get('metric') == 'room_entries' and data.get('period') == 'weekly', data
+          assert isinstance(data.get('rooms'), list), data
+          for room in data['rooms']:
+              assert isinstance(room.get('join_events'), int) and room['join_events'] >= 0, room
+              assert isinstance(room.get('unique_visitors'), int) and room['unique_visitors'] >= 0, room
+              assert 'wallet_balance' not in room and 'owner_user_id' not in room, room
+          status, data = check('/api/v1/rankings/rooms?period=unlimited')
+          assert status == 400 and data.get('error') == 'invalid_rank_filter', (status, data)
+          print('OK activity ranking: real audit counts, safe fields and strict window validation')
+
           status, data = check('/api/v1/me/blocks')
           assert status == 401 and data.get('error') == 'login_required', (status, data)
           status, data = check('/api/v1/reports', method='POST')
