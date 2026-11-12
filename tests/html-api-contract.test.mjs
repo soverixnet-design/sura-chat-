@@ -175,3 +175,18 @@ test('all embedded user reference icons resolve, including announcement megaphon
  assert.match(html,/class="ref-ann-icon"/);
  assert.match(html,/SURA user-supplied Royal HTML\/mobile-fit styling/);
 });
+
+
+test('room discovery search and country filter use real SURA room results', () => {
+  assert.match(html, /id="roomSearch"/);
+  assert.match(html, /id="roomCountry"/);
+  assert.match(html, /id="roomResults"/);
+  assert.match(html, /data-act="applyCountry"/);
+  assert.match(html, /data-act="myCountry"/);
+  assert.match(html, /data-act="allCountries"/);
+  assert.match(html, /filters\.set\("home_country",homeCountry\)/);
+  assert.match(html, /filters\.set\("country",S\.country\)/);
+  assert.match(html, /S\.roomSearch=String\(e\.target\.value\|\|""\)/);
+  assert.match(html, /String\(r\.name\|\|""\)\.toLocaleLowerCase\(\)\.includes\(search\)/);
+  assert.doesNotMatch(html, /coins:328500/);
+});
