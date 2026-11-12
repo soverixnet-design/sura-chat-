@@ -19,6 +19,8 @@ public final class ApiClient {
 
     public void setSession(String token) { bearer = token == null ? "" : token; }
     public boolean signedIn() { return !bearer.isEmpty(); }
+    public String getSession() { return bearer; }
+    public void close() { executor.shutdownNow(); }
 
     public void get(String path, Callback callback) { request("GET", path, null, callback); }
     public void post(String path, JSONObject body, Callback callback) { request("POST", path, body, callback); }
