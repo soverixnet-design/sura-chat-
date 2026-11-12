@@ -149,7 +149,7 @@ async function updateMyBlocks(request, env) {
     await env.DB.prepare('DELETE FROM user_blocks WHERE blocker_user_id = ? AND blocked_user_id = ?')
       .bind(me.id, target.id).run();
   }
-  return json({ success: true, public_id: id.replace(/^SC(?=\\d+$)/, ''), blocked: data.blocked });
+  return json({ success: true, public_id: id.replace(/^SC(?=\d+$)/, ''), blocked: data.blocked });
 }
 async function listMyBlocks(request, env) {
   const me = await currentUser(request, env);
@@ -157,8 +157,38 @@ async function listMyBlocks(request, env) {
     FROM user_blocks b JOIN users u ON u.id = b.blocked_user_id
     WHERE b.blocker_user_id = ? ORDER BY b.created_at_ms DESC LIMIT 100`).bind(me.id).all();
   return json({ blocked_users: (results || []).map(row => ({
-    ...row, public_id: row.public_id.replace(/^SC(?=\\d+$)/, '')
+    ...row, public_id: row.public_id.replace(/^SC(?=\d+$)/, '')
   })) });
+}
+
+async function reportMember(request, env) {
+  const me = await currentUser(request, env);
+  await rateLimit(request, env, 'room-user-report', me.id);
+  const data = await readJson(request);
+  const id = String(data.public_id || '').trim();
+  const reason = String(data.reason || '').trim();
+  const details = String(data.details || '').trim();
+  const contextType = String(data.context_type || 'profile').trim();
+  const contextId = String(data.context_id || '').trim();
+  if (!publicIdIsSupported(id) ||
+      !['harassment','spam','impersonation','hate','sexual_content','violence','other'].includes(reason) ||
+      !['profile','message','moment','room'].includes(contextType) ||
+      details.length > 500 || contextId.length > 128 ||
+      /[\x00-\x08\x0B\x0C\x0E-\x1F]/.test(details + contextId))
+    throw new HttpError(400, 'invalid_report');
+  const target = await findPublicUser(env, id);
+  if (!target || target.id === me.id) throw new HttpError(400, 'invalid_report_target');
+  const recent = await env.DB.prepare(`SELECT 1 FROM user_reports
+    WHERE reporter_user_id = ? AND target_user_id = ? AND created_at_ms > ? LIMIT 1`)
+    .bind(me.id, target.id, Date.now() - 15 * 60 * 1000).first();
+  if (recent) throw new HttpError(429, 'report_cooldown');
+  const reportId = crypto.randomUUID();
+  const saved = await env.DB.prepare(`INSERT INTO user_reports
+    (id, reporter_user_id, target_user_id, reason, details, context_type, context_id, status, created_at_ms)
+    VALUES (?, ?, ?, ?, ?, ?, ?, 'open', ?)`)
+    .bind(reportId, me.id, target.id, reason, details, contextType, contextId, Date.now()).run();
+  if (saved.meta?.changes !== 1) throw new HttpError(503, 'report_not_saved');
+  return json({ submitted: true, report_id: reportId }, 201);
 }
 
 // Only the two authenticated participants can read their conversation.
@@ -869,6 +899,7 @@ export default {
         if (path === '/api/v1/me/profile') return await updateMyProfile(request, env);
         if (path === '/api/v1/me/avatar') return await uploadMyAvatar(request, env);
         if (path === '/api/v1/me/blocks') return await updateMyBlocks(request, env);
+        if (path === '/api/v1/reports') return await reportMember(request, env);
         if (path === '/api/v1/auth/logout') {
           await currentUser(request, env);
           await env.DB.prepare('UPDATE auth_sessions SET revoked_at_ms = ? WHERE token_sha256 = ?')
