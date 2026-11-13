@@ -144,6 +144,19 @@ async function readMyWallets(request, env) {
   });
 }
 
+// Social counts are derived from real SURA follows; they do not represent CP or gifts.
+async function readSocialCounts(env, userId) {
+  const row = await env.DB.prepare(`SELECT
+      (SELECT COUNT(*) FROM user_follows WHERE followed_user_id = ?) AS followers,
+      (SELECT COUNT(*) FROM user_follows WHERE follower_user_id = ?) AS following`)
+    .bind(userId, userId).first();
+  return { followers: Number(row?.followers || 0), following: Number(row?.following || 0) };
+}
+async function readMySocial(request, env) {
+  const me = await currentUser(request, env);
+  return json({ social: await readSocialCounts(env, me.id) });
+}
+
 // Public profiles expose no email, session, wallet or private moderation data.
 async function memberProfile(request, env, publicId) {
   const me = await currentUser(request, env);
@@ -154,9 +167,10 @@ async function memberProfile(request, env, publicId) {
   const following = user.id !== me.id && !blockedByMe && Boolean(await env.DB.prepare(
     'SELECT 1 FROM user_follows WHERE follower_user_id = ? AND followed_user_id = ?'
   ).bind(me.id, user.id).first());
+  const social = await readSocialCounts(env, user.id);
   const { id: _internalUserId, ...publicInfo } = user;
   return json({ user: { ...publicInfo, public_id: user.public_id.replace(/^SC(?=\d+$)/, ''),
-    blocked_by_me: blockedByMe, is_following: following } });
+    blocked_by_me: blockedByMe, is_following: following, social } });
 }
 
 // Block prevents direct messaging and hides blocked users' posts/messages.
@@ -1180,6 +1194,7 @@ export default {
       }
 
       if (path === '/api/v1/me/blocks') return await listMyBlocks(request, env);
+      if (path === '/api/v1/me/social') return await readMySocial(request, env);
       if (path === '/api/v1/me/following') return await listMyFollowing(request, env);
       if (path === '/api/v1/me/reports') return await listMyReports(request, env);
       if (path === '/api/v1/staff/access') return await reportStaffAccess(request, env);
