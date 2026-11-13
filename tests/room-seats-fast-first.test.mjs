@@ -54,8 +54,8 @@ test('user-provided web/Android room designs stay synchronized',()=>{
 test('room seats and announcement appear before slow chat finishes',async()=>{
   const f=fixture();
   const pending=f.sync();
-  await Promise.resolve();
-  await Promise.resolve();
+  // Let the VM's async continuation execute before checking the DOM.
+  await new Promise(resolve=>setImmediate(resolve));
   assert.match(f.elements.seats.innerHTML,/You · tap to stand/);
   assert.match(f.elements.seats.innerHTML,/Open/);
   assert.equal(f.elements.roomName.textContent,'Actual Room');
@@ -69,8 +69,8 @@ test('room seats and announcement appear before slow chat finishes',async()=>{
 test('chat failures do not remove seats or stop future retries',async()=>{
   const f=fixture();
   const pending=f.sync();
-  await Promise.resolve();
-  await Promise.resolve();
+  // Let the VM's async continuation execute before checking the DOM.
+  await new Promise(resolve=>setImmediate(resolve));
   assert.match(f.elements.seats.innerHTML,/You · tap to stand/);
   f.rejectChat();
   await pending;
@@ -84,8 +84,8 @@ test('chat failures do not remove seats or stop future retries',async()=>{
 test('late chat from previous room cannot mutate the new room',async()=>{
   const f=fixture();
   const pending=f.sync();
-  await Promise.resolve();
-  await Promise.resolve();
+  // Let the VM's async continuation execute before checking the DOM.
+  await new Promise(resolve=>setImmediate(resolve));
   f.state.roomId='room-two';
   f.state.roomGeneration++;
   f.resolveChat();
