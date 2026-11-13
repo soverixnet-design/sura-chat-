@@ -1,0 +1,73 @@
+name: SURA v0.5.14 Royal staging test APK
+on:
+  push:
+    branches:
+      - feature/sura-connected-seat-first-20261113
+    paths:
+      - .github/workflows/sura-v0514-staging-apk-prerelease.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  staging-test-apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Validate SURA staging API source and contract tests
+        run: |
+          npm run check
+          npm test
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+      - name: Install Android SDK
+        run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+      - name: Build Android staging debug APK
+        run: gradle -p android :app:assembleDebug --no-daemon
+      - name: Prepare staging download and SHA-256
+        run: |
+          mkdir -p out
+          cp android/app/build/outputs/apk/debug/app-debug.apk out/SURA_CHAT_Royal_v0.5.14_Staging_Test.apk
+          cd out && sha256sum SURA_CHAT_Royal_v0.5.14_Staging_Test.apk > SHA256SUMS.txt
+      - name: Publish publicly downloadable staging TEST prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cat > out/RELEASE_NOTES.md <<'EOF'
+          SURA CHAT v0.5.14 is an Android DEBUG TEST APK, not a Google Play release.
+          Royal owner-provided mobile design retained. This build includes fast seat-first
+          room loading and legacy public ID compatibility for member profiles and avatars.
+          Uses the dedicated SURA staging backend; no demo wallet balances or real payments.
+          Source contract tests and Android assembly passed in CI.
+          Two physical phones' audible voice, Google login, Google Play Billing, production
+          signing and background audio are NOT verified.
+          Debug APKs from different CI runners may use different signing keys, requiring
+          uninstall of an older test app before installation. Local stored login can be lost.
+          EOF
+          gh release create "sura-chat-v0.5.14-seat-first-staging" \
+            out/SURA_CHAT_Royal_v0.5.14_Staging_Test.apk \
+            out/SHA256SUMS.txt \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title "SURA CHAT 0.5.14 · Royal mobile · Staging TEST APK" \
+            --notes-file out/RELEASE_NOTES.md \
+            --prerelease
+      - name: Verify published asset metadata
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view "sura-chat-v0.5.14-seat-first-staging" \
+            --repo "$GITHUB_REPOSITORY" --json tagName,isPrerelease,assets,url
