@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import worker from '../src/worker.js';
+import { readFileSync } from 'node:fs';
 
 const authorization = 'Bearer ' + 'S'.repeat(43);
 function fixture(activeSessions = 3) {
@@ -58,4 +59,15 @@ test('active session count never accepts an invalid DB count', async () => {
     const result = await fetchSessions(env);
     assert.equal(result.status, 401);
   }
+});
+
+test('Royal web and Android profile have matching session visibility controls', () => {
+  const html = readFileSync(new URL('../web/index.html', import.meta.url), 'utf8');
+  const android = readFileSync(new URL('../android/app/src/main/assets/sura-chat.html', import.meta.url), 'utf8');
+  assert.equal(html, android);
+  assert.match(html, /data-act="refreshSessions"/);
+  assert.match(html, /id="sessionCount"/);
+  assert.match(html, /else if\(a==="refreshSessions"\)/);
+  assert.match(html, /api\("\/api\/v1\/auth\/sessions"\)/);
+  assert.match(html, /Your current phone stays signed in/);
 });
