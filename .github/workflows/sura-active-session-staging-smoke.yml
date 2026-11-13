@@ -1,0 +1,43 @@
+name: SURA active sessions staging smoke
+on:
+  push:
+    branches:
+      - feature/sura-active-session-visibility-20261113
+    paths:
+      - .github/workflows/sura-active-session-staging-smoke.yml
+      - src/worker.js
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  live-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Verify real SURA staging API and anonymous session protection
+        run: |
+          python3 - <<'PY'
+          import json, urllib.request, urllib.error, time
+          base = 'https://sura-chat-api-staging.soverixnet.workers.dev'
+          def get(path):
+              for attempt in range(3):
+                  req=urllib.request.Request(base+path,headers={'Accept':'application/json','User-Agent':'sura-chat-live-smoke'})
+                  try:
+                      with urllib.request.urlopen(req,timeout=15) as response:
+                          return response.status,json.loads(response.read().decode('utf8'))
+                  except urllib.error.HTTPError as e:
+                      return e.code,json.loads(e.read().decode('utf8'))
+                  except (OSError,TimeoutError):
+                      if attempt==2: raise
+                      time.sleep(2)
+          status, health = get('/health')
+          assert status == 200 and health.get('app') == 'SURA CHAT' and health.get('database') == 'connected', (status,health)
+          status, config = get('/api/v1/config')
+          assert status == 200 and config.get('app') == 'SURA CHAT', (status,config)
+          status, rooms = get('/api/v1/rooms')
+          assert status == 200 and isinstance(rooms.get('rooms'),list), (status,rooms)
+          status, secret = get('/api/v1/auth/sessions')
+          assert status == 401 and secret.get('error') == 'login_required', (status,secret)
+          assert 'active_sessions' not in secret and 'other_sessions' not in secret, secret
+          print('PASS: dedicated SURA staging API is live; session counts require authentication.')
+          PY
