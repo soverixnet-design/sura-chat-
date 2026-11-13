@@ -237,7 +237,7 @@ test('member safety is accessible on actual member profiles and room chat', () =
   assert.match(html, /\/api\/v1\/reports/);
   assert.match(html, /context_type:"profile"/);
   assert.match(html, /className="chat-member-name"/);
-  assert.match(html, /async function openDm\(id\)\{if\(!\/\^\\d\{7,8\}\$\//);
+  assert.match(html, /async function openDm\(input\)\{const id=canonicalMemberId\(input\);if\(!id\)/);
 });
 
 test('rooms search across SURA server and profile country is editable',()=>{
