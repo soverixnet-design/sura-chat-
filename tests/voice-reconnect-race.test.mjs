@@ -10,11 +10,12 @@ assert.ok(start>=0&&end>start,'run the actual app voice functions');
 
 function fixture(){
  const pending=[],leaves=[],statuses=[],notifications=[];
- const audio={meeting:undefined};
+ const audio={meeting:undefined,preloadedAudioElem:undefined};
+ const remoteAudio={tagName:'AUDIO',autoplay:true,muted:false,srcObject:null,paused:false,pause(){this.paused=true;}};
  const S={roomId:'room-a',voice:{meeting:null,roomId:'',role:'',busy:false,busyGeneration:-1,generation:0}};
  const sdk={init({authToken}){return new Promise(resolve=>pending.push({authToken,resolve}));}};
  const context=vm.createContext({
-  S,console,E:()=>audio,voiceStatus:s=>statuses.push(s),voiceNet:s=>statuses.push(s),
+  S,console,E:id=>id==='suraRemoteAudio'?remoteAudio:audio,voiceStatus:s=>statuses.push(s),voiceNet:s=>statuses.push(s),
   toast:s=>notifications.push(s),showVoiceTransports:()=>{},
   loadVoiceSdk:async()=>sdk,loadVoiceUi:async()=>{},
   api:async(path)=>{
@@ -28,7 +29,7 @@ function fixture(){
   return {name,meta:{on(){}},self:{audioEnabled:false,on(){},async disableAudio(){}},
     async join(){},async leave(){leaves.push(name);}};
  }
- return {context,S,audio,pending,leaves,statuses,notifications,meeting};
+ return {context,S,audio,remoteAudio,pending,leaves,statuses,notifications,meeting};
 }
 async function until(predicate){
  for(let n=0;n<100;n++){if(predicate())return;await new Promise(resolve=>setImmediate(resolve));}
@@ -63,4 +64,6 @@ test('leaving during SDK init allows instant voice join in the next room without
  assert.equal(f.S.voice.meeting,meetingB);
  assert.equal(f.S.voice.roomId,'room-b');
  assert.equal(f.audio.meeting,meetingB);
+ assert.equal(f.audio.preloadedAudioElem,f.remoteAudio);
+ assert.equal(f.remoteAudio.muted,false);
 });
