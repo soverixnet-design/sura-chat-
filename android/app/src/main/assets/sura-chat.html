@@ -412,16 +412,21 @@ html,body{height:100%;width:100%;min-height:0;overflow:hidden}
  const E=id=>document.getElementById(id);
  const safe=v=>String(v==null?"":v).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
  const fmt=v=>Number(v||0).toLocaleString("en-US");
+ function canonicalMemberId(value){
+  const raw=String(value||"");
+  const id=raw.replace(/^SC(?=\d{7,8}$)/,"");
+  return /^\d{7,8}$/.test(id)?id:"";
+ }
  function avatarUrl(user){
-  const id=String(user&&user.public_id||"");
-  if(!/^(?:[0-9]{7,8}|SC[0-9]{8})$/.test(id)||!user.avatar_key)return "";
+  const id=canonicalMemberId(user&&user.public_id);
+  if(!id||!user.avatar_key)return "";
   return API+"/api/v1/users/"+encodeURIComponent(id)+"/avatar?v="+encodeURIComponent(user.avatar_key);
  }
  function avatarHtml(user){const src=avatarUrl(user);return src?'<img alt="" loading="lazy" src="'+safe(src)+'" onerror="this.replaceWith(document.createTextNode(\'👤\'))">':'👤';}
  function refreshHeaderAvatar(){const host=E("headerAvatar");if(host)host.innerHTML=avatarHtml(S.user);}
  function closeMemberProfile(){S.memberProfileId="";E("memberProfileSheet").hidden=true;}
  async function openMemberProfile(publicId){
-  const id=String(publicId||"");if(!/^[0-9]{7,8}$/.test(id))return toast("Invalid member ID");
+  const id=canonicalMemberId(publicId);if(!id)return toast("Invalid member ID");
   const sheet=E("memberProfileSheet"),body=E("memberProfileBody");S.memberProfileId=id;sheet.hidden=false;
   body.innerHTML='<div class="h"><b>Member Profile</b><button type="button" class="btn" data-act="closeMemberProfile">✕</button></div><p>Loading member profile…</p>';
   try{
@@ -1129,7 +1134,7 @@ async function openRoomGiftPreview(){
  }catch(error){if(id===S.roomId)sheet.innerHTML='<div class="ref-sheet-top"><b>Gift Catalog</b><button data-act="closeGiftPreview">✕</button></div><p>'+safe(error.message)+'</p>';}
 }
 
- async function openDm(id){if(!/^\d{7,8}$/.test(id))return toast("Invalid member ID");const r=await api("/api/v1/messages/"+id);S.peer=id;S.peerName=(r.peer && r.peer.display_name)||id;S.dm=r.messages||[];S.tab="dm";nav();render();}
+ async function openDm(input){const id=canonicalMemberId(input);if(!id)return toast("Invalid member ID");const r=await api("/api/v1/messages/"+id);S.peer=id;S.peerName=(r.peer && r.peer.display_name)||id;S.dm=r.messages||[];S.tab="dm";nav();render();}
  document.addEventListener("click",async e=>{const el=e.target.closest("[data-act]");if(!el)return;try{const a=el.dataset.act;
   if(a==="authTab"){S.authGeneration++;S.signup=el.dataset.value==="signup";authForm();}
   else if(a==="tab"){if(S.roomId)void leave(el.dataset.value);else go(el.dataset.value);}
