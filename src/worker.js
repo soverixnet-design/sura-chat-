@@ -623,6 +623,18 @@ async function revokeOtherSessions(request, env) {
   return json({ other_sessions_revoked: true, count: Number(result.meta?.changes || 0) });
 }
 
+// Show only the signed-in member's active session count. No session hashes,
+ // client IPs or persistent device identifiers are ever returned.
+async function readActiveSessions(request, env) {
+  const me = await currentUser(request, env);
+  const row = await env.DB.prepare(`SELECT COUNT(*) AS active_sessions
+    FROM auth_sessions
+    WHERE user_id = ? AND expires_at_ms > ? AND revoked_at_ms IS NULL`)
+    .bind(me.id, Date.now()).first();
+  const activeSessions = Math.max(1, Number(row?.active_sessions || 0));
+  return json({ active_sessions: activeSessions, other_sessions: activeSessions - 1 });
+}
+
 async function createRoom(request, env) {
   const user = await currentUser(request, env);
   await rateLimit(request, env, 'rooms-create');
@@ -1323,6 +1335,7 @@ export default {
         return json({ app: 'SURA CHAT', environment: 'staging', status: result?.ok === 1 ? 'ok' : 'degraded', database: result?.ok === 1 ? 'connected' : 'error', media: env.MEDIA ? 'bound' : 'unavailable', voice: voiceConfigured(env) ? 'realtimekit_enabled' : 'realtimekit_config_required', transactions: 'disabled' }, result?.ok === 1 ? 200 : 503);
       }
 
+      if (path === '/api/v1/auth/sessions') return await readActiveSessions(request, env);
       if (path === '/api/v1/me/blocks') return await listMyBlocks(request, env);
       if (path === '/api/v1/me/social') return await readMySocial(request, env);
       if (path === '/api/v1/me/following') return await listMyFollowing(request, env);
