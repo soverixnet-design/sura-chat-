@@ -1,0 +1,45 @@
+name: SURA Admin Center staging HTTP smoke
+on:
+  push:
+    branches:
+      - feature/sura-admin-center-readonly-20261113
+    paths:
+      - .github/workflows/sura-admin-staging-smoke.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  staging-safety:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Confirm dedicated SURA API and anonymous admin isolation
+        run: |
+          python3 - <<'PY'
+          import json, time, urllib.request, urllib.error
+          BASE='https://sura-chat-api-staging.soverixnet.workers.dev'
+          def get(route):
+              request=urllib.request.Request(BASE+route,headers={'Accept':'application/json','User-Agent':'SURA-admin-CI-smoke'})
+              for attempt in range(3):
+                  try:
+                      with urllib.request.urlopen(request,timeout=12) as reply:
+                          return reply.status,json.loads(reply.read().decode())
+                  except urllib.error.HTTPError as error:
+                      return error.code,json.loads(error.read().decode())
+                  except (OSError,TimeoutError):
+                      if attempt==2:raise
+                      time.sleep(2)
+          code,payload=get('/health')
+          assert code==200 and payload.get('app')=='SURA CHAT' and payload.get('database')=='connected',(code,payload)
+          code,payload=get('/api/v1/rooms')
+          assert code==200 and isinstance(payload.get('rooms'),list),(code,payload)
+          for path in ['/api/v1/staff/access',
+                       '/api/v1/staff/admin/summary',
+                       '/api/v1/staff/admin/users?public_id=1234567',
+                       '/api/v1/staff/admin/rooms?limit=20',
+                       '/api/v1/staff/admin/audit?limit=15']:
+              code,payload=get(path)
+              assert code==401 and payload.get('error')=='login_required',(path,code,payload)
+              assert not any(x in payload for x in ('summary','user','rooms','actions')),(path,payload)
+          print('PASS: SURA staging is healthy; anonymous admin reads are denied.')
+          PY
