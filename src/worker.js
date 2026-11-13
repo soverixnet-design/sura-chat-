@@ -301,9 +301,19 @@ async function requireReportModerator(request, env) {
   if (!mayReviewReports(user, env)) throw new HttpError(403, 'moderator_required');
   return user;
 }
+function mayEditLiveEvents(user, env) {
+  const id = String(user.public_id || '').replace(/^SC(?=\d+$)/, '');
+  const permitted = String(env.SURA_EVENT_ADMIN_IDS || '').split(',').map(v => v.trim());
+  return /^[0-9]{7,8}$/.test(id) && permitted.includes(id);
+}
+async function requireLiveEventEditor(request, env) {
+  const me = await currentUser(request, env);
+  if (!mayEditLiveEvents(me, env)) throw new HttpError(403, 'event_editor_required');
+  return me;
+}
 async function reportStaffAccess(request, env) {
   const me = await currentUser(request, env);
-  return json({ moderator: mayReviewReports(me, env) });
+  return json({ moderator: mayReviewReports(me, env), event_editor: mayEditLiveEvents(me, env) });
 }
 async function listMyReports(request, env) {
   const me = await currentUser(request, env);
@@ -930,6 +940,108 @@ async function createMoment(request, env) {
   return json({ created: true }, 201);
 }
 
+
+/**
+ * Daily progress is derived from existing authenticated SURA records, not
+ * client-side guesses or synthetic gifts. Resets every day at 00:00 UTC.
+ * Completing a task never creates a coin credit: rewards are disabled.
+ */
+async function readMyDailyProgress(request, env) {
+  const me = await currentUser(request, env);
+  const now = Date.now();
+  const startMs = Math.floor(now / 86400000) * 86400000;
+  const nextResetMs = startMs + 86400000;
+  const startSql = new Date(startMs).toISOString().slice(0, 19).replace('T', ' ');
+  const row = await env.DB.prepare(`SELECT
+    (SELECT COUNT(*) FROM room_audit_events e
+      WHERE e.actor_user_id = ? AND e.action = 'join' AND e.created_at >= ?) AS room_joins,
+    (SELECT COUNT(*) FROM room_audit_events e
+      WHERE e.actor_user_id = ? AND e.action = 'sit' AND e.created_at >= ?) AS seat_sits,
+    (SELECT COUNT(*) FROM moments m
+      WHERE m.author_user_id = ? AND m.created_at_ms >= ?) AS moments,
+    (SELECT COUNT(*) FROM direct_messages d
+      WHERE d.sender_user_id = ? AND d.created_at_ms >= ?) AS messages,
+    (SELECT COUNT(*) FROM user_follows f
+      WHERE f.follower_user_id = ? AND f.created_at_ms >= ?) AS new_follows`)
+    .bind(me.id, startSql, me.id, startSql, me.id, startMs, me.id, startMs, me.id, startMs).first();
+  const task = (id, label, field) => {
+    const count = Number(row?.[field] || 0);
+    return { id, label, progress: count, target: 1, completed: count >= 1 };
+  };
+  return json({ reset_at_ms: nextResetMs, timezone: 'UTC', rewards_enabled: false, tasks: [
+    task('room_visit', 'Enter a voice room', 'room_joins'),
+    task('seat_join', 'Take a room seat', 'seat_sits'),
+    task('moment_post', 'Publish a Moment', 'moments'),
+    task('private_message', 'Send a private message', 'messages'),
+    task('follow_member', 'Follow a member', 'new_follows'),
+  ] });
+}
+
+async function listLiveEvents(request, env, url) {
+  const me = await currentUser(request, env);
+  const country = String(url.searchParams.get('country') || me.country_code || '').toUpperCase();
+  if (country && !/^[A-Z]{2}$/.test(country)) throw new HttpError(400, 'invalid_event_country');
+  const now = Date.now();
+  const { results } = await env.DB.prepare(`SELECT id, title, body, country_code,
+      start_at_ms, end_at_ms
+    FROM sura_live_events
+    WHERE status = 'published' AND end_at_ms > ?
+      AND (? = '' OR country_code = '' OR country_code = ?)
+    ORDER BY start_at_ms ASC, id ASC LIMIT 30`)
+    .bind(now, country, country).all();
+  return json({ events: results || [], as_of_ms: now });
+}
+
+async function listStaffLiveEvents(request, env) {
+  await requireLiveEventEditor(request, env);
+  const { results } = await env.DB.prepare(`SELECT id, title, body, country_code,
+      start_at_ms, end_at_ms, status, updated_at_ms
+    FROM sura_live_events ORDER BY updated_at_ms DESC LIMIT 100`).all();
+  return json({ events: results || [] });
+}
+
+/**
+ * Staff event publishing is explicitly allowlisted by SURA_EVENT_ADMIN_IDS.
+ * No default admin, no cross-app credentials, no wallet or gift writes.
+ */
+async function saveLiveEvent(request, env) {
+  const actor = await requireLiveEventEditor(request, env);
+  await rateLimit(request, env, 'event-editor', actor.id);
+  const data = await readJson(request);
+  const id = data.id === undefined ? crypto.randomUUID() : String(data.id);
+  const updating = data.id !== undefined;
+  const title = String(data.title || '').trim();
+  const body = String(data.body || '').trim();
+  const country = String(data.country_code || '').trim().toUpperCase();
+  const start = Number(data.start_at_ms);
+  const end = Number(data.end_at_ms);
+  const status = String(data.status || 'draft');
+  const now = Date.now();
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id) ||
+    title.length < 3 || title.length > 80 || body.length > 600 ||
+    /[\x00-\x08\x0B\x0C\x0E-\x1F]/.test(title + body) ||
+    (country && !/^[A-Z]{2}$/.test(country)) ||
+    !Number.isSafeInteger(start) || !Number.isSafeInteger(end) || end <= start ||
+    start < now - 366 * 86400000 || end > now + 366 * 86400000 ||
+    !['draft', 'published', 'hidden'].includes(status)) throw new HttpError(400, 'invalid_event');
+  const write = updating
+    ? env.DB.prepare(`UPDATE sura_live_events SET title = ?, body = ?, country_code = ?,
+      start_at_ms = ?, end_at_ms = ?, status = ?, updated_at_ms = ? WHERE id = ?`)
+      .bind(title, body, country, start, end, status, now, id)
+    : env.DB.prepare(`INSERT INTO sura_live_events
+      (id, title, body, country_code, start_at_ms, end_at_ms, status,
+       author_user_id, created_at_ms, updated_at_ms) VALUES(?,?,?,?,?,?,?,?,?,?)`)
+      .bind(id, title, body, country, start, end, status, actor.id, now, now);
+  const audit = env.DB.prepare(`INSERT INTO admin_audit_log
+    (id, actor_user_id, action, target_type, target_id)
+    VALUES (?, ?, ?, 'sura_live_event', ?)`)
+    .bind(crypto.randomUUID(), actor.id, updating ? 'update_event' : 'create_event', id);
+  // D1 batch executes atomically: event and audit log succeed or fail together.
+  const results = await env.DB.batch([write, audit]);
+  if (results?.[0]?.meta?.changes !== 1) throw new HttpError(404, 'event_not_found');
+  return json({ saved: true, id, status }, updating ? 200 : 201);
+}
+
 async function listRooms(request, env, url) {
   const limit = pageSize(url.searchParams.get('limit'));
   const offsetText = url.searchParams.get('offset');
@@ -1164,6 +1276,7 @@ export default {
         }
         if (path === '/api/v1/rooms') return await createRoom(request, env);
         if (path === '/api/v1/moments') return await createMoment(request, env);
+        if (path === '/api/v1/staff/events') return await saveLiveEvent(request, env);
         const dmPostMatch = /^\/api\/v1\/messages\/([0-9]{7,8})$/.exec(path);
         if (dmPostMatch) return await sendDirectMessage(request, env, dmPostMatch[1]);
         const chatPostMatch = /^\/api\/v1\/rooms\/([0-9a-f-]{36})\/messages$/i.exec(path);
@@ -1200,6 +1313,9 @@ export default {
       if (path === '/api/v1/staff/access') return await reportStaffAccess(request, env);
       if (path === '/api/v1/staff/reports') return await listReviewQueue(request, env, url);
       if (path === '/api/v1/me/wallets') return await readMyWallets(request, env);
+      if (path === '/api/v1/me/daily') return await readMyDailyProgress(request, env);
+      if (path === '/api/v1/events') return await listLiveEvents(request, env, url);
+      if (path === '/api/v1/staff/events') return await listStaffLiveEvents(request, env);
       if (path === '/api/v1/me') {
         const user = await currentUser(request, env);
         return json({ user: { public_id: user.public_id.replace(/^SC(?=\d+$)/, ''), display_name: user.display_name,
