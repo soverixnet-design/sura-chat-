@@ -914,11 +914,11 @@ if(S.tab==="home")x.innerHTML=
   if(S.roomSyncPromise)return S.roomSyncPromise;
   const id=S.roomId,generation=S.roomGeneration;
   const task=(async()=>{
-   const [a,chatResult]=await Promise.all([
-    api("/api/v1/rooms/"+id+"/seats"),
-    api("/api/v1/rooms/"+id+"/messages?after="+S.after)
-      .then(data=>({data}),error=>({error}))
-   ]);
+   // Request chat concurrently, but show seats as soon as the seat API responds.
+   // A slow or disconnected messages endpoint must not delay room entry.
+   const chatRequest=api("/api/v1/rooms/"+id+"/messages?after="+S.after)
+     .then(data=>({data}),error=>({error}));
+   const a=await api("/api/v1/rooms/"+id+"/seats");
    if(id!==S.roomId||generation!==S.roomGeneration)return;
    if(!a||!a.room||!Array.isArray(a.seats))throw Error("Invalid room seat response");
    E("roomName").textContent=a.room.name;
@@ -930,9 +930,12 @@ if(S.tab==="home")x.innerHTML=
     S.seatSig=sig;
     E("seats").innerHTML=a.seats.map(s=>'<button class="seat" data-act="'+(s.public_id?(String(s.public_id).replace(/^SC(?=\d+$)/,"")===String(S.user&&S.user.public_id)?"stand":"member"):"seat")+'" data-id="'+safe(s.public_id||"")+'" data-n="'+Number(s.seat_number)+'" aria-label="'+(String(s.public_id||"").replace(/^SC(?=\d+$)/,"")===String(S.user&&S.user.public_id)?"My seat "+Number(s.seat_number)+". Tap to leave seat.":"Seat "+Number(s.seat_number))+'"><div class="av">'+(s.is_locked?'🔒':s.public_id?avatarHtml(s):'＋')+'</div><small>'+safe(String(s.public_id||"").replace(/^SC(?=\d+$)/,"")===String(S.user&&S.user.public_id)?"You · tap to stand":s.display_name||(s.is_locked?'Locked':'Open'))+'</small><small>'+Number(s.seat_number)+'</small></button>').join("");
    }
+   // Seats and room header are already visible even while chat is pending.
+   const chatResult=await chatRequest;
+   if(id!==S.roomId||generation!==S.roomGeneration)return;
    if(chatResult.error){
     if(!S.chatError){S.chatError=true;toast("Messages delayed; retrying automatically.");}
-    return; // Show updated room and seats even if chat is temporarily unavailable.
+    return; // Keep seats visible and retry chat on the next poll.
    }
    const b=chatResult.data;
    if(!b||!Array.isArray(b.messages))throw Error("Invalid room chat response");
