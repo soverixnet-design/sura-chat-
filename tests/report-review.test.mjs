@@ -41,7 +41,7 @@ async function query(env,path,{method='GET',body,auth=true}={}){
 
 test('report review permission is authenticated and closed unless staff IDs are configured',async()=>{
  const {env}=fakeEnv();
- assert.deepEqual(await query(env,'/api/v1/staff/access'),{status:200,data:{moderator:false}});
+ assert.deepEqual(await query(env,'/api/v1/staff/access'),{status:200,data:{moderator:false,event_editor:false}});
  const queue=await query(env,'/api/v1/staff/reports');
  assert.equal(queue.status,403);
  assert.equal(queue.data.error,'moderator_required');
@@ -60,7 +60,7 @@ test('reviewer authorization matches only exact canonical SURA public IDs',async
  }
  const {env}=fakeEnv({staff:'12345678,1234567'});
  const r=await query(env,'/api/v1/staff/access');
- assert.deepEqual(r.data,{moderator:true});
+ assert.deepEqual(r.data,{moderator:true,event_editor:false});
 });
 
 test('only configured staff see bounded report queue with safe public IDs',async()=>{
