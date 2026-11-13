@@ -254,6 +254,23 @@ async function listMyFollowing(request, env) {
   })) });
 }
 
+
+async function listMyFollowers(request, env) {
+  const me = await currentUser(request, env);
+  const { results } = await env.DB.prepare(`SELECT u.public_id, u.display_name, u.country_code,
+      u.avatar_key, f.created_at_ms FROM user_follows f
+    JOIN users u ON u.id = f.follower_user_id
+    WHERE f.followed_user_id = ? AND u.status = 'active'
+      AND NOT EXISTS (SELECT 1 FROM user_blocks b
+        WHERE (b.blocker_user_id = ? AND b.blocked_user_id = u.id)
+           OR (b.blocker_user_id = u.id AND b.blocked_user_id = ?))
+    ORDER BY f.created_at_ms DESC, u.public_id ASC LIMIT 100`)
+    .bind(me.id, me.id, me.id).all();
+  return json({ followers: (results || []).map(r => ({
+    ...r, public_id: r.public_id.replace(/^SC(?=\d+$)/, '')
+  })) });
+}
+
 async function reportMember(request, env) {
   const me = await currentUser(request, env);
   await rateLimit(request, env, 'room-user-report', me.id);
@@ -1309,6 +1326,7 @@ export default {
       if (path === '/api/v1/me/blocks') return await listMyBlocks(request, env);
       if (path === '/api/v1/me/social') return await readMySocial(request, env);
       if (path === '/api/v1/me/following') return await listMyFollowing(request, env);
+      if (path === '/api/v1/me/followers') return await listMyFollowers(request, env);
       if (path === '/api/v1/me/reports') return await listMyReports(request, env);
       if (path === '/api/v1/staff/access') return await reportStaffAccess(request, env);
       if (path === '/api/v1/staff/reports') return await listReviewQueue(request, env, url);
