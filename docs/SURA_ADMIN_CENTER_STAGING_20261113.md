@@ -25,3 +25,12 @@ No permissions to add/subtract coins, suspend/erase accounts, issue purchases, a
 
 ## Release gates
 CI tests, Android source build, dedicated SURA staging deployment and live anonymous access smoke must pass separately before any claim of live use. Real account admin testing and physical two-device voice are still required; no Play release is implied.
+
+## Verified CI and staging deployment — 13 Nov 2026
+- Automated Node/API checks passed on feature branch: https://github.com/soverixnet-design/sura-chat-/actions/runs/43487227101
+- Android debug build passed with matching owner-reference web and Android assets: https://github.com/soverixnet-design/sura-chat-/actions/runs/43486896830
+- SURA-only staging Worker version `946a8828-e6cd-40f4-b0e5-7444c42893d7` deployed at 100% through deployment `1baa64f6-b3ba-4b17-aa8c-f0de12a17d56`.
+- Strictly inherited all eight original bindings: D1 DB, R2 MEDIA, two rate limiters, RTK account ID, RTK app ID, secret RTK API token, voice enabled flag.
+- Live HTTP smoke passed: https://github.com/soverixnet-design/sura-chat-/actions/runs/43487541838 . Health, rooms and anonymous denial on all admin reads verified.
+- `SURA_ADMIN_IDS` was not configured; access is still **closed** to all current signed-in accounts until a genuine SURA user ID is explicitly verified and allowlisted. No admin permissions were silently granted.
+- Source remains draft, neither main nor Play production published; no financial writes or D1 migrations.
