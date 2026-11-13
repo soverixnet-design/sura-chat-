@@ -123,3 +123,15 @@ test('owner Royal web and Android admin center remain byte identical, JS parses'
   assert.match(web, /id="adminUserSearch"/);
   for (const match of web.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/gi)) if(match[1].trim()) assert.doesNotThrow(()=>new Script(match[1]));
 });
+
+test('moderator or event-editor privilege alone never implies global admin', async () => {
+  const x = fixture();
+  x.env.SURA_MODERATOR_IDS = '1234567';
+  x.env.SURA_EVENT_ADMIN_IDS = '1234567';
+  const access = await get(x.env, '/api/v1/staff/access');
+  assert.equal(access.status, 200);
+  assert.equal(access.data.moderator, true);
+  assert.equal(access.data.event_editor, true);
+  assert.equal(access.data.admin_center, false);
+  assert.equal((await get(x.env, '/api/v1/staff/admin/rooms')).status, 403);
+});
