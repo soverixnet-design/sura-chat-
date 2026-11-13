@@ -330,8 +330,72 @@ async function requireLiveEventEditor(request, env) {
 }
 async function reportStaffAccess(request, env) {
   const me = await currentUser(request, env);
-  return json({ moderator: mayReviewReports(me, env), event_editor: mayEditLiveEvents(me, env) });
+  return json({ moderator: mayReviewReports(me, env), event_editor: mayEditLiveEvents(me, env),
+    admin_center: mayAccessAdminCenter(me, env) });
 }
+// A separate SURA-only operator allowlist; no fallback to room ownership,
+// Sharika IDs, client role flags or a publicly disclosed default ID.
+function mayAccessAdminCenter(user, env) {
+  const id = String(user.public_id || '').replace(/^SC(?=\d+$)/, '');
+  const permitted = String(env.SURA_ADMIN_IDS || '').split(',').map(x => x.trim());
+  return /^\d{7,8}$/.test(id) && permitted.includes(id);
+}
+async function requireAdminCenter(request, env) {
+  const user = await currentUser(request, env);
+  if (!mayAccessAdminCenter(user, env)) throw new HttpError(403, 'admin_required');
+  await rateLimit(request, env, 'room-admin-reads', user.id);
+  return user;
+}
+// Dashboard contains only aggregate activity derived from the SURA database.
+// Never infer or create demo balances, users, reports or financial metrics.
+async function readAdminSummary(request, env) {
+  await requireAdminCenter(request, env);
+  const counts = await env.DB.prepare(`SELECT
+    (SELECT COUNT(*) FROM users) AS total_users,
+    (SELECT COUNT(*) FROM users WHERE status = 'active') AS active_users,
+    (SELECT COUNT(*) FROM rooms WHERE status != 'closed') AS visible_rooms,
+    (SELECT COUNT(*) FROM user_reports WHERE status IN ('open','reviewing')) AS pending_reports`).first();
+  if (!counts) throw new HttpError(503, 'admin_summary_unavailable');
+  return json({ summary: counts, financial_mutations_enabled: false });
+}
+async function readAdminUser(request, env, url) {
+  await requireAdminCenter(request, env);
+  const id = String(url.searchParams.get('public_id') || '').trim().replace(/^SC(?=\d{7,8}$)/, '');
+  if (!/^\d{7,8}$/.test(id)) throw new HttpError(400, 'invalid_member_id');
+  const legacy = 'SC' + id;
+  const user = await env.DB.prepare(`SELECT u.public_id, u.display_name, u.country_code,
+      u.status, u.created_at,
+      (SELECT COUNT(*) FROM rooms r WHERE r.owner_user_id = u.id) AS rooms_owned
+    FROM users u LEFT JOIN user_public_id_aliases a ON a.user_id = u.id
+    WHERE u.public_id IN (?, ?) OR a.legacy_public_id IN (?, ?)
+    LIMIT 1`).bind(id, legacy, id, legacy).first();
+  if (!user) throw new HttpError(404, 'member_not_found');
+  return json({ user: { ...user, public_id: String(user.public_id).replace(/^SC(?=\d+$)/, '') } });
+}
+async function readAdminRooms(request, env, url) {
+  await requireAdminCenter(request, env);
+  const limit = pageSize(url.searchParams.get('limit') ?? 20);
+  const offset = Number(url.searchParams.get('offset') ?? 0);
+  if (!Number.isSafeInteger(offset) || offset < 0 || offset > 10000) throw new HttpError(400, 'invalid_offset');
+  const { results } = await env.DB.prepare(`SELECT r.id, r.name, r.status, r.country_code,
+      r.seat_count, r.created_at, u.public_id AS owner_public_id,
+      (SELECT COUNT(*) FROM room_memberships m WHERE m.room_id = r.id AND m.left_at IS NULL) AS joined_members
+    FROM rooms r JOIN users u ON u.id = r.owner_user_id
+    ORDER BY r.created_at DESC, r.id DESC LIMIT ? OFFSET ?`).bind(limit, offset).all();
+  return json({ rooms: (results || []).map(r => ({ ...r, owner_public_id: String(r.owner_public_id).replace(/^SC(?=\d+$)/, '') })),
+    next_offset: (results || []).length === limit ? offset + limit : null });
+}
+async function readAdminAudit(request, env, url) {
+  await requireAdminCenter(request, env);
+  const limit = pageSize(url.searchParams.get('limit') ?? 20);
+  const { results } = await env.DB.prepare(`SELECT l.action, l.target_type, l.created_at,
+      actor.public_id AS actor_public_id
+    FROM admin_audit_log l LEFT JOIN users actor ON actor.id = l.actor_user_id
+    ORDER BY l.created_at DESC, l.id DESC LIMIT ?`).bind(limit).all();
+  return json({ actions: (results || []).map(r => ({ ...r, actor_public_id:
+    r.actor_public_id ? String(r.actor_public_id).replace(/^SC(?=\d+$)/, '') : null })) });
+}
+
 async function listMyReports(request, env) {
   const me = await currentUser(request, env);
   const { results } = await env.DB.prepare(`SELECT r.id, r.reason, r.context_type, r.status, r.created_at_ms,
@@ -1343,6 +1407,10 @@ export default {
       if (path === '/api/v1/me/followers') return await listMyFollowers(request, env);
       if (path === '/api/v1/me/reports') return await listMyReports(request, env);
       if (path === '/api/v1/staff/access') return await reportStaffAccess(request, env);
+      if (path === '/api/v1/staff/admin/summary') return await readAdminSummary(request, env);
+      if (path === '/api/v1/staff/admin/users') return await readAdminUser(request, env, url);
+      if (path === '/api/v1/staff/admin/rooms') return await readAdminRooms(request, env, url);
+      if (path === '/api/v1/staff/admin/audit') return await readAdminAudit(request, env, url);
       if (path === '/api/v1/staff/reports') return await listReviewQueue(request, env, url);
       if (path === '/api/v1/me/wallets') return await readMyWallets(request, env);
       if (path === '/api/v1/me/daily') return await readMyDailyProgress(request, env);
