@@ -631,7 +631,8 @@ async function readActiveSessions(request, env) {
     FROM auth_sessions
     WHERE user_id = ? AND expires_at_ms > ? AND revoked_at_ms IS NULL`)
     .bind(me.id, Date.now()).first();
-  const activeSessions = Math.max(1, Number(row?.active_sessions || 0));
+  const activeSessions = Number(row?.active_sessions);
+  if (!Number.isSafeInteger(activeSessions) || activeSessions < 1) throw new HttpError(401, 'session_expired');
   return json({ active_sessions: activeSessions, other_sessions: activeSessions - 1 });
 }
 
