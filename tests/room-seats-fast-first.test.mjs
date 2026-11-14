@@ -26,6 +26,7 @@ function fixture() {
   const messages = [];
   const context = createContext({
     S:state, E:id=>elements[id], safe:v=>String(v), avatarHtml:()=>'avatar',
+    canonicalMemberId:value=>String(value||'').replace(/^SC(?=\d{7,8}$)/,''), refreshHeaderAvatar:()=>{},
     stableSeatSignature:seats=>JSON.stringify(seats),
     toast:v=>messages.push(v),
     api:path=>{
