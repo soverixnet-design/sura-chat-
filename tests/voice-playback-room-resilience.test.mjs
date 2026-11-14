@@ -50,6 +50,7 @@ test('room seat loads despite chat API failure, warns only once, and recovers',a
   roomSyncPromise:null,chatError:false,seatSig:'',after:0,lastRoomSeats:[],user:{public_id:'1234567'}};
  const context=createContext({
   S,E:(id)=>elements[id],toast:(m)=>notices.push(m),
+  canonicalMemberId:value=>String(value||'').replace(/^SC(?=\d{7,8}$)/,''), refreshHeaderAvatar:()=>{},
   api:async(path)=>{
    calls.push(path);
    if(path.includes('/seats'))return {room:{name:'Real Room',seat_count:8,status:'active',announcement:'Welcome'},seats:[{seat_number:1,is_locked:false,public_id:null,display_name:null,avatar_key:null}]};
