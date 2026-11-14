@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 
 const web = readFileSync(new URL('../web/index.html', import.meta.url), 'utf8');
 const bundled = readFileSync(new URL('../android/app/src/main/assets/sura-chat.html', import.meta.url), 'utf8');
-const canonicalMemberId = value => String(value || '').replace(/^SC(?=\\d{7,8}$)/, '');
+const canonicalMemberId = value => String(value || '').replace(/^SC(?=\d{7,8}$)/, '');
 
 test('staging Android and Royal web use the same corrected room avatar flow', () => {
   assert.equal(web, bundled);
@@ -36,9 +36,9 @@ test('successful avatar upload updates the existing occupied seat without rebuil
   const end = web.indexOf('async function loadRoomManage', start);
   assert.ok(start > 0 && end > start);
   const upload = web.slice(start,end);
-  assert.match(upload,/requestToken!==S\\.token/);
-  assert.match(upload,/requestPublicId!==canonicalMemberId\\(S\\.user&&S\\.user\\.public_id\\)/);
-  assert.match(upload,/avatar\\.innerHTML=avatarHtml\\(ownSeat\\)/);
-  assert.match(upload,/S\\.seatSig=stableSeatSignature\\(S\\.lastRoomSeats\\)/);
-  assert.doesNotMatch(upload,/E\\("seats"\\)\\.innerHTML=/);
+  assert.match(upload,/requestToken!==S\.token/);
+  assert.match(upload,/requestPublicId!==canonicalMemberId\(S\.user&&S\.user\.public_id\)/);
+  assert.match(upload,/avatar\.innerHTML=avatarHtml\(ownSeat\)/);
+  assert.match(upload,/S\.seatSig=stableSeatSignature\(S\.lastRoomSeats\)/);
+  assert.doesNotMatch(upload,/E\("seats"\)\.innerHTML=/);
 });
