@@ -958,11 +958,16 @@ if(S.tab==="home")x.innerHTML=
    E("roomName").textContent=a.room.name;
    E("roomInfo").textContent=a.room.seat_count+" seats · "+a.room.status;
    E("announcement").textContent=a.room.announcement||"No announcement";
-   const sig=stableSeatSignature(a.seats);
+   // A recent own-profile avatar is authoritative even if the room snapshot
+   // has not caught up. Do not rerender the grid for an unchanged seat state.
+   const myPublicId=canonicalMemberId(S.user&&S.user.public_id);
+   const visibleSeats=a.seats.map(s=>myPublicId&&canonicalMemberId(s.public_id)===myPublicId&&S.user.avatar_key
+    ?{...s,avatar_key:S.user.avatar_key}:s);
+   const sig=stableSeatSignature(visibleSeats);
    if(sig!==S.seatSig){
-    S.lastRoomSeats=a.seats;
+    S.lastRoomSeats=visibleSeats;
     S.seatSig=sig;
-    E("seats").innerHTML=a.seats.map(s=>'<button class="seat" data-act="'+(s.public_id?(String(s.public_id).replace(/^SC(?=\d+$)/,"")===String(S.user&&S.user.public_id)?"stand":"member"):"seat")+'" data-id="'+safe(s.public_id||"")+'" data-n="'+Number(s.seat_number)+'" aria-label="'+(String(s.public_id||"").replace(/^SC(?=\d+$)/,"")===String(S.user&&S.user.public_id)?"My seat "+Number(s.seat_number)+". Tap to leave seat.":"Seat "+Number(s.seat_number))+'"><div class="av">'+(s.is_locked?'🔒':s.public_id?avatarHtml(s):'＋')+'</div><small>'+safe(String(s.public_id||"").replace(/^SC(?=\d+$)/,"")===String(S.user&&S.user.public_id)?"You · tap to stand":s.display_name||(s.is_locked?'Locked':'Open'))+'</small><small>'+Number(s.seat_number)+'</small></button>').join("");
+    E("seats").innerHTML=visibleSeats.map(s=>'<button class="seat" data-act="'+(s.public_id?(String(s.public_id).replace(/^SC(?=\d+$)/,"")===String(S.user&&S.user.public_id)?"stand":"member"):"seat")+'" data-id="'+safe(s.public_id||"")+'" data-n="'+Number(s.seat_number)+'" aria-label="'+(String(s.public_id||"").replace(/^SC(?=\d+$)/,"")===String(S.user&&S.user.public_id)?"My seat "+Number(s.seat_number)+". Tap to leave seat.":"Seat "+Number(s.seat_number))+'"><div class="av">'+(s.is_locked?'🔒':s.public_id?avatarHtml(s):'＋')+'</div><small>'+safe(String(s.public_id||"").replace(/^SC(?=\d+$)/,"")===String(S.user&&S.user.public_id)?"You · tap to stand":s.display_name||(s.is_locked?'Locked':'Open'))+'</small><small>'+Number(s.seat_number)+'</small></button>').join("");
    }
    // Seats and room header are already visible even while chat is pending.
    const chatResult=await chatRequest;
@@ -1050,6 +1055,7 @@ if(S.tab==="home")x.innerHTML=
  }
  async function saveAvatar(){
   if(!S.token||!S.user)throw Error("Please log in first.");
+  const requestToken=S.token,requestPublicId=canonicalMemberId(S.user.public_id);
   const picker=E("avatarFile"),file=picker&&picker.files&&picker.files[0];
   if(!file)throw Error("Choose a profile photo first.");
   const btn=document.querySelector('[data-act="saveAvatar"]');
@@ -1060,20 +1066,33 @@ if(S.tab==="home")x.innerHTML=
    let result;
    try{
     const response=await fetch(API+"/api/v1/me/avatar",{
-     method:"POST",headers:{Authorization:"Bearer "+S.token,"Content-Type":"image/webp",Accept:"application/json"},
+     method:"POST",headers:{Authorization:"Bearer "+requestToken,"Content-Type":"image/webp",Accept:"application/json"},
      body:image,signal:controller.signal,cache:"no-store"
     });
     result=await response.json().catch(()=>({error:"invalid_response"}));
     if(!response.ok)throw Error(result.error||"photo_upload_failed");
    }finally{clearTimeout(timer);}
    if(!result||!result.avatar_key)throw Error("invalid_avatar_response");
+   if(requestToken!==S.token||requestPublicId!==canonicalMemberId(S.user&&S.user.public_id))return;
    S.user.avatar_key=result.avatar_key;
    picker.value="";
    toast("Profile photo updated.");
    refreshHeaderAvatar();
    if(S.tab==="profile")render();
-   // Seat snapshots include avatar_key; the next refresh updates the room image too.
-   if(S.roomId)void syncRoom().catch(()=>{});
+   // Update the occupied seat's avatar in place; avoid shaking all seats.
+   if(S.roomId){
+    const ownSeat=(S.lastRoomSeats||[]).find(s=>canonicalMemberId(s.public_id)===requestPublicId);
+    if(ownSeat){
+     ownSeat.avatar_key=result.avatar_key;
+     const seatButton=Array.from(E("seats").querySelectorAll("button.seat")).find(el=>canonicalMemberId(el.dataset.id)===requestPublicId);
+     const avatar=seatButton&&seatButton.querySelector(".av");
+     if(avatar){
+      avatar.innerHTML=avatarHtml(ownSeat);
+      S.seatSig=stableSeatSignature(S.lastRoomSeats);
+     }
+    }
+    void syncRoom().catch(()=>{});
+   }
   }finally{if(btn)btn.disabled=false;}
  }
  async function loadRoomManage(openPanel){
