@@ -23,12 +23,13 @@ test('room seat snapshots retain the latest own profile picture without touching
     { seat_number: 2, public_id: '7654321', avatar_key: 'other' },
     { seat_number: 3, public_id: '', avatar_key: '' },
   ];
-  const result = mapper({ seats: original },{ user: { public_id: '1234567', avatar_key: 'new' } },canonicalMemberId);
+  const result = mapper({ seats: original },{ user: { public_id: '1234567' }, avatarPendingKey: 'new' },canonicalMemberId);
   assert.equal(result[0].avatar_key, 'new');
   assert.equal(result[1], original[1]);
   assert.equal(result[2], original[2]);
   assert.equal(original[0].avatar_key, 'stale');
-  assert.equal(mapper({ seats: original }, { user: null }, canonicalMemberId)[0], original[0]);
+  assert.equal(mapper({ seats: original }, { user: { public_id: '1234567' }, avatarPendingKey: '' }, canonicalMemberId)[0], original[0]);
+  assert.equal(mapper({ seats: original }, { user: null, avatarPendingKey: '' }, canonicalMemberId)[0], original[0]);
 });
 
 test('successful avatar upload updates the existing occupied seat without rebuilding the grid', () => {
@@ -38,6 +39,7 @@ test('successful avatar upload updates the existing occupied seat without rebuil
   const upload = web.slice(start,end);
   assert.match(upload,/requestToken!==S\.token/);
   assert.match(upload,/requestPublicId!==canonicalMemberId\(S\.user&&S\.user\.public_id\)/);
+  assert.match(upload,/S\.avatarPendingKey=result\.avatar_key/);
   assert.match(upload,/avatar\.innerHTML=avatarHtml\(ownSeat\)/);
   assert.match(upload,/S\.seatSig=stableSeatSignature\(S\.lastRoomSeats\)/);
   assert.doesNotMatch(upload,/E\("seats"\)\.innerHTML=/);
