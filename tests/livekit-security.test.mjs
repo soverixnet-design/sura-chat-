@@ -99,3 +99,40 @@ test('unexpected LiveKit disconnect clears remote audio and ignores late tracks'
   assert.equal(disconnected,1);
   assert.equal(removed,1);
 });
+
+test('unsubscribed LiveKit audio is paused, detached and not replayed on room exit', async () => {
+  const source = readFileSync(new URL('../web/sura-livekit.js', import.meta.url), 'utf8');
+  const handlers = {};
+  let appended=0, paused=0, removed=0;
+  const element={srcObject:{active:true},setAttribute(){},play:async()=>{},pause(){paused++;},remove(){removed++;}};
+  const roomMock={
+    localParticipant:{isMicrophoneEnabled:false,setMicrophoneEnabled:async()=>{}},
+    on(name,handler){handlers[name]=handler;},
+    connect:async()=>{},startAudio:async()=>{},disconnect:async()=>{}
+  };
+  const context=createContext({window:{LivekitClient:{
+    Room:function(){return roomMock;},
+    RoomEvent:{TrackSubscribed:'track',TrackUnsubscribed:'untrack',ConnectionStateChanged:'state',Disconnected:'disconnect'},
+    Track:{Kind:{Audio:'audio'}},
+    DisconnectReason:{PARTICIPANT_REMOVED:4}
+  }},document:{body:{appendChild(){appended++;}}},Promise,Set,Array});
+  new Script(source).runInContext(context);
+  const adapter=await context.window.SuraLiveKit.load();
+  const meeting=await adapter.init({serverUrl:'wss://test',authToken:'test'});
+  await meeting.join();
+  const track={kind:'audio',attach:()=>element,detach:()=>[element]};
+  handlers.track(track);
+  assert.equal(appended,1);
+  handlers.untrack(track);
+  assert.equal(paused,1);
+  assert.equal(element.srcObject,null);
+  assert.equal(removed,1);
+  // A later disconnect or idempotent leave must not touch detached media twice.
+  handlers.disconnect(4);
+  await meeting.leave();
+  assert.equal(paused,1);
+  assert.equal(removed,1);
+  let videoDetached=false;
+  handlers.untrack({kind:'video',detach(){videoDetached=true;return []; }});
+  assert.equal(videoDetached,false);
+});
