@@ -1,0 +1,61 @@
+name: SURA email-phone PIN staging HTTP smoke
+on:
+  push:
+    branches:
+      - feature/sura-email-phone-pin-auth-20261116
+    paths:
+      - '.github/workflows/sura-phone-auth-staging-smoke.yml'
+      - 'src/auth-identifiers.js'
+      - 'src/worker.js'
+      - 'tests/email-phone-pin-auth.test.mjs'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  anonymous-auth-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Verify real SURA staging HTTP routes without creating accounts
+        env:
+          SURA_API: https://sura-chat-api-staging.soverixnet.workers.dev
+        run: |
+          python3 - <<'PY'
+          import json, os, urllib.request, urllib.error
+          base = os.environ['SURA_API'].rstrip('/')
+          def check(method, route, expected, body=None):
+              req = urllib.request.Request(base+route, method=method,
+                data=json.dumps(body).encode() if body is not None else None,
+                headers={'Accept':'application/json','Content-Type':'application/json',
+                         'User-Agent':'sura-auth-anonymous-smoke'})
+              try:
+                  with urllib.request.urlopen(req, timeout=15) as response:
+                      status, result = response.status, json.loads(response.read())
+              except urllib.error.HTTPError as error:
+                  status, result = error.code, json.loads(error.read())
+              assert status == expected, (route, status, result.get('error'))
+              return result
+
+          health = check('GET','/health',200)
+          assert health['app']=='SURA CHAT' and health['database']=='connected'
+          assert health['environment']=='staging'
+          print('PASS health/database')
+          check('GET','/api/v1/config',200)
+          check('GET','/api/v1/rooms',200)
+          print('PASS config and room listing unchanged')
+          # Both sign-in identifiers exercise the real login Worker and no account is created.
+          for identifier in ['sura-qa-nonexistent@example.invalid', '+999000000001']:
+              result = check('POST','/api/v1/auth/login',401,
+                             {'identifier':identifier,'password':'80715593'})
+              assert result['error']=='invalid_credentials', result
+          print('PASS email + phone login endpoints reject unknown credentials')
+          result = check('POST','/api/v1/auth/signup',400,
+                         {'phone':'+999000000001','display_name':'QA PIN',
+                          'password':'1234567'})
+          assert result['error']=='invalid_signup'
+          print('PASS invalid signup cannot create an account')
+          result = check('POST','/api/v1/me/phone',401,
+                         {'phone':'+999000000001','current_password':'80715593'})
+          assert result['error']=='login_required'
+          print('PASS phone linking requires authentication')
+          PY
