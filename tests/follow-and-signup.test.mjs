@@ -86,10 +86,10 @@ test('member profile exposes only own follow status, not follower list',async()=
  assert.equal(p.data.user.is_following,true);
  assert.ok(!Object.hasOwn(p.data.user,'id'));
 });
-test('new signup rejects weak PINs and accepts stronger password without OTP',async()=>{
+test('signup rejects invalid PIN lengths and accepts 8-digit PIN or a stronger password without OTP',async()=>{
  const {env,writes}=fakeEnv();
  const base={email:'alice@example.com',display_name:'Alice',country_code:'BD'};
- for(const password of ['12345678','passwordonly','1234567890','short1A','a'.repeat(65)+'1']){
+ for(const password of ['1234567','passwordonly','123456789','short1A','a'.repeat(65)+'1']){
   const r=await send(env,'POST','/api/v1/auth/signup',{...base,password},false);
   assert.equal(r.status,400,password);
   assert.equal(r.data.error,'invalid_signup');
@@ -101,6 +101,9 @@ test('new signup rejects weak PINs and accepts stronger password without OTP',as
  assert.ok(typeof valid.data.token==='string');
  assert.ok(writes.some(w=>w.batch===2));
  assert.ok(writes.some(w=>/INSERT INTO auth_sessions/.test(w.sql)));
+ const pin=await send(env,'POST','/api/v1/auth/signup',{...base,email:'pin@example.com',password:'24681357'},false);
+ assert.equal(pin.status,201);
+ assert.ok(typeof pin.data.token==='string');
 });
 test('original reference Web and Android assets remain byte-identical with following UI',()=>{
  const web=readFileSync(new URL('../web/index.html',import.meta.url),'utf8');
