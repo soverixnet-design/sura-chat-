@@ -64,3 +64,38 @@ test('LiveKit client disconnect removes attached remote media and does not publi
   handlers.track({kind:'audio',attach:()=>({setAttribute(){},play:()=>Promise.resolve(),pause(){},remove(){removed++;}})});
   await meeting.self.enableAudio();assert.equal(published,1);await meeting.leave();assert.equal(removed,1);
 });
+
+test('unexpected LiveKit disconnect clears remote audio and ignores late tracks', async () => {
+  const source=readFileSync(new URL('../web/sura-livekit.js',import.meta.url),'utf8');
+  const handlers={};let attached=0,paused=0,removed=0,disconnected=0;
+  const remoteElement={setAttribute(){},play:()=>Promise.resolve(),pause(){paused++;},remove(){removed++;}};
+  const roomMock={
+    localParticipant:{isMicrophoneEnabled:false,setMicrophoneEnabled:async()=>{}},
+    on:(name,handler)=>{handlers[name]=handler;},
+    connect:async()=>{},startAudio:async()=>{},disconnect:async()=>{disconnected++;}
+  };
+  const context=createContext({window:{LivekitClient:{
+    Room:function(){return roomMock;},
+    RoomEvent:{TrackSubscribed:'track',TrackUnsubscribed:'untrack',ConnectionStateChanged:'state',Disconnected:'disconnect'},
+    Track:{Kind:{Audio:'audio'}},
+    DisconnectReason:{PARTICIPANT_REMOVED:4}
+  }},document:{body:{appendChild(){attached++;}}},Promise,Set});
+  new Script(source).runInContext(context);
+  const adapter=await context.window.SuraLiveKit.load();
+  const meeting=await adapter.init({serverUrl:'wss://test',authToken:'test'});
+  let exitState=null;
+  meeting.self.on('roomLeft',event=>{exitState=event.state;});
+  await meeting.join();
+  const track={kind:'audio',attach:()=>remoteElement,detach:()=>[remoteElement]};
+  handlers.track(track);
+  assert.equal(attached,1);
+  handlers.disconnect(4); // Server kick, no explicit leave() yet.
+  assert.equal(exitState,'kicked');
+  assert.equal(paused,1);
+  assert.equal(removed,1);
+  handlers.track(track); // Delayed callback must not revive audio.
+  assert.equal(attached,1);
+  await meeting.leave(); // Cleanup remains idempotent.
+  assert.equal(disconnected,1);
+  assert.equal(removed,1);
+});
