@@ -1,3 +1,5 @@
+import { LivekitError, livekitConfigured, issueLivekit, revokeLivekit, authorizeLivekit } from './livekit.js';
+import { normalizeEmail, normalizePhone, isAllowedPassword, phoneOnlyCredentialEmail, isPhoneOnlyCredentialEmail } from './auth-identifiers.js';
 // SURA CHAT staging API. Intentionally separate from the Sharika infrastructure.
 // Authentication, room membership and public Moments are backed by dedicated SURA D1.
 // Payments, gifting, salary and admin mutations remain disabled.
@@ -103,9 +105,10 @@ async function currentUser(request, env) {
   const match = /^Bearer ([\w-]{40,64})$/.exec(request.headers.get('Authorization') || '');
   if (!match) throw new HttpError(401, 'login_required');
   const tokenHash = await sha256(match[1]);
-  const user = await env.DB.prepare(`SELECT u.id, u.public_id, u.display_name, u.country_code, u.bio, u.avatar_key, c.email_normalized
+  const user = await env.DB.prepare(`SELECT u.id, u.public_id, u.display_name, u.country_code, u.bio, u.avatar_key, c.email_normalized, p.phone_e164
     FROM auth_sessions AS s JOIN users AS u ON u.id = s.user_id
     JOIN user_credentials AS c ON c.user_id = u.id
+    LEFT JOIN user_phone_logins AS p ON p.user_id = u.id
     WHERE s.token_sha256 = ? AND s.expires_at_ms > ? AND s.revoked_at_ms IS NULL AND u.status = 'active'`)
     .bind(tokenHash, Date.now()).first();
   if (!user) throw new HttpError(401, 'session_expired');
@@ -571,68 +574,86 @@ async function getAvatar(env, publicId) {
 async function signup(request, env) {
   await rateLimit(request, env, 'signup');
   const data = await readJson(request);
-  const email = String(data.email || '').trim().toLowerCase();
+  // Email, phone or both may be supplied. Neither is claimed verified (no OTP).
+  const rawEmail = String(data.email || '').trim();
+  const rawPhone = String(data.phone || '').trim();
+  const email = rawEmail ? normalizeEmail(rawEmail) : null;
+  const phone = rawPhone ? normalizePhone(rawPhone) : null;
   const password = data.password;
   const displayName = String(data.display_name || '').trim();
   const country = String(data.country_code || '').trim().toUpperCase();
-  if (!/^[^\s@]{1,64}@[^\s@]{1,190}\.[a-z]{2,20}$/.test(email) ||
-      // New accounts use strong passwords with no email OTP. Legacy eight-digit
-      // PINs remain valid for existing logins but are no longer issued.
-      typeof password !== 'string' || password.length < 10 || password.length > 64 ||
-      !/[A-Za-z]/.test(password) || !/[0-9]/.test(password) ||
-      /[\x00-\x1F\x7F]/.test(password) ||
+  if ((!email && !phone) || (rawEmail && !email) || (rawPhone && !phone) ||
+      !isAllowedPassword(password) ||
       displayName.length < 2 || displayName.length > 40 ||
       (country && !/^[A-Z]{2}$/.test(country))) throw new HttpError(400, 'invalid_signup');
-  if (await env.DB.prepare('SELECT 1 FROM user_credentials WHERE email_normalized = ?').bind(email).first()) {
+  if (email && await env.DB.prepare('SELECT 1 FROM user_credentials WHERE email_normalized = ?').bind(email).first())
     throw new HttpError(409, 'account_exists');
-  }
+  if (phone && await env.DB.prepare('SELECT 1 FROM user_phone_logins WHERE phone_e164 = ?').bind(phone).first())
+    throw new HttpError(409, 'account_exists');
+
   const userId = crypto.randomUUID();
+  // Preserve the existing email NOT NULL column without pretending to own an email.
+  // This reserved identifier is never displayed, emailed or used for recovery.
+  const internalEmail = email || phoneOnlyCredentialEmail(userId);
   const salt = crypto.getRandomValues(new Uint8Array(16));
   const passwordHash = await hashPassword(password, salt);
   let publicId;
   for (let attempt = 0; attempt < 5; attempt++) {
     publicId = randomPublicId();
     try {
-      await env.DB.batch([
+      const statements = [
         env.DB.prepare('INSERT INTO users(id, public_id, display_name, country_code) VALUES(?, ?, ?, ?)')
           .bind(userId, publicId, displayName, country || null),
         env.DB.prepare('INSERT INTO user_credentials(user_id, email_normalized, salt_b64, password_hash_b64, iterations) VALUES(?, ?, ?, ?, ?)')
-          .bind(userId, email, b64(salt), b64(passwordHash), PASSWORD_ITERATIONS),
-      ]);
+          .bind(userId, internalEmail, b64(salt), b64(passwordHash), PASSWORD_ITERATIONS),
+      ];
+      if (phone) statements.push(env.DB.prepare('INSERT INTO user_phone_logins(user_id, phone_e164) VALUES(?, ?)')
+        .bind(userId, phone));
+      await env.DB.batch(statements);
       break;
     } catch (error) {
       if (!/UNIQUE constraint/i.test(String(error))) throw error;
-      if (await env.DB.prepare('SELECT 1 FROM user_credentials WHERE email_normalized = ?').bind(email).first()) {
+      if (email && await env.DB.prepare('SELECT 1 FROM user_credentials WHERE email_normalized = ?').bind(email).first())
         throw new HttpError(409, 'account_exists');
-      }
+      if (phone && await env.DB.prepare('SELECT 1 FROM user_phone_logins WHERE phone_e164 = ?').bind(phone).first())
+        throw new HttpError(409, 'account_exists');
       if (attempt === 4) throw new HttpError(503, 'public_id_unavailable');
     }
   }
   const token = await issueSession(env, userId);
-  return json({ user: { public_id: publicId, display_name: displayName, country_code: country || null, bio: '', avatar_key: null }, token, token_type: 'Bearer', expires_in: SESSION_LIFETIME_MS / 1000 }, 201);
+  return json({ user: { public_id: publicId, display_name: displayName, country_code: country || null,
+    bio: '', avatar_key: null }, token, token_type: 'Bearer', expires_in: SESSION_LIFETIME_MS / 1000 }, 201);
 }
 
 async function login(request, env) {
   await rateLimit(request, env, 'login');
   const data = await readJson(request);
-  const email = String(data.email || '').trim().toLowerCase();
-  const password = data.password;
-  if (typeof password !== 'string' || password.length > 128 || email.length > 256) throw new HttpError(400, 'invalid_login');
-  // In addition to IP throttling, protect a single account from guesses
-  // distributed across IPs. Hash the email so no address enters limiter keys.
-  if (email) await rateLimit(request, env, 'login-account', await sha256(email));
-  const credential = await env.DB.prepare(`SELECT c.user_id, c.salt_b64, c.password_hash_b64, c.iterations,
+  const rawIdentifier = data.identifier ?? data.email ?? data.phone;
+  if (typeof rawIdentifier !== 'string' || rawIdentifier.length > 256 ||
+      typeof data.password !== 'string' || !data.password || data.password.length > 128)
+    throw new HttpError(400, 'invalid_login');
+  const email = normalizeEmail(rawIdentifier);
+  const phone = email ? null : normalizePhone(rawIdentifier);
+  if (!email && !phone) throw new HttpError(400, 'invalid_login');
+  // Throttle attempts against each identifier across IPs without exposing PII in keys.
+  await rateLimit(request, env, 'login-account', await sha256((email ? 'email:' + email : 'phone:' + phone)));
+  const selected = `SELECT c.user_id, c.salt_b64, c.password_hash_b64, c.iterations,
       u.public_id, u.display_name, u.country_code, u.bio, u.avatar_key, u.status
-      FROM user_credentials AS c JOIN users AS u ON u.id = c.user_id WHERE c.email_normalized = ?`)
-    .bind(email).first();
-  // Both unknown accounts and incorrect passwords take a PBKDF2 verification.
+      FROM user_credentials AS c JOIN users AS u ON u.id = c.user_id`;
+  const credential = email
+    ? await env.DB.prepare(selected + ' WHERE c.email_normalized = ?').bind(email).first()
+    : await env.DB.prepare(selected +
+        ' JOIN user_phone_logins AS p ON p.user_id = c.user_id WHERE p.phone_e164 = ?').bind(phone).first();
+  // Unknown accounts and incorrect passwords both do PBKDF2 verification.
   const salt = credential ? unb64(credential.salt_b64) : new Uint8Array(16);
-  const actual = await hashPassword(password, salt, credential?.iterations ?? PASSWORD_ITERATIONS);
+  const actual = await hashPassword(data.password, salt, credential?.iterations ?? PASSWORD_ITERATIONS);
   const expected = credential ? unb64(credential.password_hash_b64) : new Uint8Array(32);
-  if (!credential || credential.status !== 'active' || !equalBytes(actual, expected)) throw new HttpError(401, 'invalid_credentials');
+  if (!credential || credential.status !== 'active' || !equalBytes(actual, expected))
+    throw new HttpError(401, 'invalid_credentials');
   const token = await issueSession(env, credential.user_id);
   return json({ user: { public_id: credential.public_id.replace(/^SC(?=\d+$)/, ''), display_name: credential.display_name,
-    country_code: credential.country_code, bio: credential.bio, avatar_key: credential.avatar_key }, token, token_type: 'Bearer', expires_in: SESSION_LIFETIME_MS / 1000 });
+    country_code: credential.country_code, bio: credential.bio, avatar_key: credential.avatar_key }, token,
+    token_type: 'Bearer', expires_in: SESSION_LIFETIME_MS / 1000 });
 }
 
 // A signed-in user can strengthen a legacy eight-digit PIN without email OTP.
@@ -651,12 +672,26 @@ async function verifyCurrentPassword(request, env, password, purpose) {
     throw new HttpError(401, 'invalid_current_password');
   return { me, credential };
 }
+async function linkMyPhone(request, env) {
+  const data = await readJson(request);
+  const phone = normalizePhone(data.phone);
+  if (!phone) throw new HttpError(400, 'invalid_phone');
+  // A logged-in member must prove current password before adding a login alias.
+  const { me } = await verifyCurrentPassword(request, env, data.current_password, 'auth-phone-link');
+  try {
+    await env.DB.prepare(`INSERT INTO user_phone_logins(user_id, phone_e164) VALUES(?, ?)
+      ON CONFLICT(user_id) DO UPDATE SET phone_e164 = excluded.phone_e164`)
+      .bind(me.id, phone).run();
+  } catch (error) {
+    if (/UNIQUE constraint/i.test(String(error))) throw new HttpError(409, 'phone_already_used');
+    throw error;
+  }
+  return json({ phone_linked: true, phone, phone_verified: false });
+}
 async function changeMyPassword(request, env) {
   const data = await readJson(request);
   const newPassword = data.new_password;
-  if (typeof newPassword !== 'string' || newPassword.length < 10 ||
-      newPassword.length > 64 || !/[A-Za-z]/.test(newPassword) ||
-      !/[0-9]/.test(newPassword) || /[\x00-\x1F\x7F]/.test(newPassword))
+  if (!isAllowedPassword(newPassword))
     throw new HttpError(400, 'weak_new_password');
   const { me, credential } = await verifyCurrentPassword(request, env, data.current_password, 'auth-password-change');
   if (String(data.current_password) === newPassword)
@@ -751,6 +786,7 @@ async function realtimeApi(env, method, path, data) {
 }
 
 async function revokeVoiceParticipant(env, roomId, userId) {
+  await revokeLivekit(env, roomId, userId);
   const participant = await env.DB.prepare(`SELECT p.participant_id, m.meeting_id FROM room_voice_participants p
     JOIN room_voice_meetings m ON m.room_id = p.room_id
     WHERE p.room_id = ? AND p.user_id = ?`).bind(roomId, userId).first();
@@ -1350,10 +1386,22 @@ export default {
       const url = new URL(request.url);
       const path = url.pathname.replace(/\/+$/, '') || '/';
 
+      if (path === '/api/v1/rtc/authorize' && request.method === 'GET') {
+        await authorizeLivekit(env, request.headers.get('X-Sura-RTC-Token'));
+        return new Response(null, {status:204,headers:{'Cache-Control':'no-store'}});
+      }
       if (request.method === 'POST') {
+        const livekitMatch = /^\/api\/v1\/rooms\/([0-9a-f-]{36})\/livekit\/token$/i.exec(path);
+        if (livekitMatch) {
+          const permission = await voiceEligibility(request, env, livekitMatch[1]);
+          await rateLimit(request, env, 'room-voice');
+          return json(await issueLivekit(env, livekitMatch[1], permission,
+            () => voiceEligibility(request, env, livekitMatch[1]).catch(() => null)));
+        }
         if (path === '/api/v1/auth/signup') return await signup(request, env);
         if (path === '/api/v1/auth/login') return await login(request, env);
         if (path === '/api/v1/auth/change-password') return await changeMyPassword(request, env);
+        if (path === '/api/v1/me/phone') return await linkMyPhone(request, env);
         if (path === '/api/v1/auth/revoke-other-sessions') return await revokeOtherSessions(request, env);
         if (path === '/api/v1/me/profile') return await updateMyProfile(request, env);
         if (path === '/api/v1/me/avatar') return await uploadMyAvatar(request, env);
@@ -1419,7 +1467,8 @@ export default {
       if (path === '/api/v1/me') {
         const user = await currentUser(request, env);
         return json({ user: { public_id: user.public_id.replace(/^SC(?=\d+$)/, ''), display_name: user.display_name,
-          country_code: user.country_code, email: user.email_normalized, bio: user.bio, avatar_key: user.avatar_key } });
+          country_code: user.country_code, email: isPhoneOnlyCredentialEmail(user.email_normalized) ? null : user.email_normalized,
+          phone: user.phone_e164 || null, phone_verified: false, bio: user.bio, avatar_key: user.avatar_key } });
       }
 
       const memberProfileMatch = /^\/api\/v1\/users\/([0-9]{7,8})$/i.exec(path);
@@ -1430,7 +1479,7 @@ export default {
       const voiceEligibilityMatch = /^\/api\/v1\/rooms\/([0-9a-f-]{36})\/voice\/status$/i.exec(path);
       if (voiceEligibilityMatch) {
         const permission = await voiceEligibility(request, env, voiceEligibilityMatch[1]);
-        return json({ configured: voiceConfigured(env), role: permission.role, seat: permission.seat });
+        return json({ configured: voiceConfigured(env), livekit_configured: livekitConfigured(env), role: permission.role, seat: permission.seat });
       }
 
       if (path === '/api/v1/config') {
@@ -1481,7 +1530,7 @@ export default {
 
       return json({ error: 'not_found' }, 404);
     } catch (error) {
-      if (error instanceof HttpError) return json({ error: error.code }, error.status);
+      if (error instanceof HttpError || error instanceof LivekitError) return json({ error: error.code }, error.status);
       // Never leak D1 errors or infrastructure details to clients.
       console.error(JSON.stringify({ event: 'sura_api_error', name: error?.name, message: error?.message }));
       return json({ error: 'server_error' }, 500);

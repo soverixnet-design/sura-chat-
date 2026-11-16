@@ -45,7 +45,7 @@ jobs:
           try:
               for n,email in enumerate(qa_emails):
                   result=expect('POST','/api/v1/auth/signup',201,body={
-                    'email':email,'password':''.join(str(secrets.randbelow(10)) for _ in range(8)),
+                    'email':email,'password':'Sura9-'+secrets.token_urlsafe(24),
                     'display_name':f'SURA QA {n+1}','country_code':'BD'
                   })
                   tokens.append(result['token'])
