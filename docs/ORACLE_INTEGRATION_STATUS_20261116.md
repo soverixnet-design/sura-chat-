@@ -28,7 +28,7 @@
 
 ## Publication status
 
-Local changes were committed but the public GitHub push was blocked by automatic approval review pending explicit publication authorization. No new APK or completed Oracle-connected release is claimed.
+User explicitly approved public publication and the Sura RTC hostname. Changes are published in PR #24 using the connected GitHub account. The DNS-only A record for sura-live.sharika.app was created and HTTP 200 verified. No new APK or completed Oracle-connected release is claimed.
 
 ## References
 
