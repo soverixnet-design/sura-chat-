@@ -163,6 +163,9 @@ test('both Android and web use the real identifier login form without OTP contro
   assert.match(web,/name="identifier"/);
   assert.match(web,/name="phone"/);
   assert.match(web,/pattern="\[0-9\]\{8\}"/);
-  assert.match(web,/No OTP/);
+  assert.match(web,/No OTP|no OTP/);
+  assert.match(web,/Gmail \/ Email or phone number/);
+  assert.match(web,/01712345678 or \+8801712345678/);
+  assert.match(web,/8-digit PIN \(no OTP\)/);
   assert.doesNotMatch(web,/type="submit"[^>]*>Send OTP</);
 });
