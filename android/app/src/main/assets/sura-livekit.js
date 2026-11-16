@@ -19,10 +19,18 @@
     init: async function (options) {
       var sdk = window.LivekitClient;
       var room = new sdk.Room({adaptiveStream:true, dynacast:true});
-      var events = {}, mediaEvents = {}, elements = new Set();
+      var events = {}, mediaEvents = {}, elements = new Set(), closed = false;
       var emit = function (name, data) { if (events[name]) events[name](data); };
+      // A server kick or failed connection must release remote audio immediately,
+      // even when the room controller has not yet called leave().
+      var clearRemoteAudio = function () {
+        elements.forEach(function (element) {
+          element.pause(); element.srcObject = null; element.remove();
+        });
+        elements.clear();
+      };
       room.on(sdk.RoomEvent.TrackSubscribed, function (track) {
-        if (track.kind !== sdk.Track.Kind.Audio) return;
+        if (track.kind !== sdk.Track.Kind.Audio || closed) return;
         var element = track.attach();
         element.autoplay = true; element.setAttribute('playsinline','');
         element.hidden = true; document.body.appendChild(element); elements.add(element);
@@ -35,6 +43,8 @@
         if (mediaEvents.mediaConnectionUpdate) mediaEvents.mediaConnectionUpdate({transport:'consuming',state:state});
       });
       room.on(sdk.RoomEvent.Disconnected, function (reason) {
+        closed = true;
+        clearRemoteAudio();
         emit('roomLeft',{state:reason===sdk.DisconnectReason.PARTICIPANT_REMOVED?'kicked':'disconnected'});
       });
       return {
@@ -51,8 +61,9 @@
           await room.startAudio();
         },
         leave: async function () {
+          closed = true;
           try { await room.disconnect(); }
-          finally { elements.forEach(function (element) { element.pause(); element.srcObject=null; element.remove(); }); elements.clear(); }
+          finally { clearRemoteAudio(); }
         }
       };
     }
