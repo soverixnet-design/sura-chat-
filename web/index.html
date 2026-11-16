@@ -505,7 +505,7 @@ html,body{height:100%;width:100%;min-height:0;overflow:hidden}
   const code=String(error&&error.message||"unknown");
   if(code==="invalid_credentials")return "Email/phone or password is incorrect. If this is your first time, choose Sign Up.";
   if(code==="account_exists")return "This email or phone number is already registered. Choose Login with its password.";
-  if(code==="invalid_signup")return "Enter your name, an email and/or phone number, and an 8-digit PIN. Use +country code for international phone numbers. No OTP.";
+  if(code==="invalid_signup")return "Enter your name, Gmail/email and/or phone, and an 8-digit PIN. Bangladesh numbers may start 01; other countries require +country code. No OTP.";
   if(code==="invalid_phone")return "Enter a phone number with country code, e.g. +8801712345678.";
   if(code==="phone_already_used")return "This phone number is already registered.";
   if(code==="rate_limited"||code==="too_many_requests")return "Too many attempts. Try again later.";
@@ -518,8 +518,8 @@ html,body{height:100%;width:100%;min-height:0;overflow:hidden}
  function authForm(){
   E("loginBox").innerHTML='<div class="tabs"><button class="'+(!S.signup?'on':'')+'" data-act="authTab" data-value="login">Login</button><button class="'+(S.signup?'on':'')+'" data-act="authTab" data-value="signup">Sign Up</button></div><div id="authIssue" role="alert" class="auth-issue" hidden></div><form id="authForm" class="form">'+
    (S.signup?'<label>Name<input name="display_name" minlength="2" maxlength="40" required></label>':'')+
-   (S.signup?'<label>Email (optional)<input type="email" name="email" autocomplete="email" autocapitalize="none" spellcheck="false" placeholder="name@gmail.com"></label><label>Phone (optional)<input type="tel" name="phone" autocomplete="tel" placeholder="+8801712345678" inputmode="tel"></label>':'<label>Email or phone number<input name="identifier" required autocomplete="username" autocapitalize="none" spellcheck="false" placeholder="name@gmail.com or +8801712345678"></label>')+
-   '<label>'+(S.signup?'8-digit PIN':'Password')+'<input name="password" type="password" '+(S.signup?'minlength="8" maxlength="8" pattern="[0-9]{8}" inputmode="numeric" autocomplete="new-password"':'autocomplete="current-password"')+' required></label>'+
+   (S.signup?'<label>Email (optional)<input type="email" name="email" autocomplete="email" autocapitalize="none" spellcheck="false" placeholder="name@gmail.com"></label><label>Phone (optional, no OTP)<input type="tel" name="phone" autocomplete="tel" placeholder="01712345678 or +8801712345678" inputmode="tel"></label>':'<label>Gmail / Email or phone number<input name="identifier" required autocomplete="username" autocapitalize="none" spellcheck="false" placeholder="name@gmail.com or 01712345678" inputmode="text"></label>')+
+   '<label>'+(S.signup?'8-digit PIN (no OTP)':'Password / 8-digit PIN')+'<input name="password" type="password" '+(S.signup?'minlength="8" maxlength="8" pattern="[0-9]{8}" inputmode="numeric" autocomplete="new-password"':'autocomplete="current-password"')+' required></label>'+
    (S.signup?'<label>Country code (optional)<input name="country_code" maxlength="2" pattern="[a-zA-Z]{2}" placeholder="BD"></label>':'')+
    '<label style="display:flex;align-items:center;gap:8px;font-size:12px"><input type="checkbox" name="remember" checked style="width:18px;height:18px">Keep me signed in on this phone (up to 7 days)</label><button class="gold" type="submit">'+(S.signup?'Create Account':'Sign In')+'</button></form>'+(readSavedLogin()&&!S.signup?'<button class="gold" type="button" data-act="retrySavedLogin" style="margin-top:10px">Retry saved login</button>':'')+'<p class="muted" style="margin-top:12px">Use email or phone + PIN; no OTP. Phone and email are not verified and cannot be used for password recovery yet. Existing longer passwords still work. SURA accounts are separate from Sharika; Google sign-in is not active.</p>';
  }
