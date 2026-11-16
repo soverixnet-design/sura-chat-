@@ -23,11 +23,17 @@
       var emit = function (name, data) { if (events[name]) events[name](data); };
       // A server kick or failed connection must release remote audio immediately,
       // even when the room controller has not yet called leave().
+      // A participant may unsubscribe before the room disconnects. Stop the
+      // detached element immediately so audio cannot outlive its track.
+      var discardAudioElement = function (element) {
+        if (!element || !elements.has(element)) return;
+        elements.delete(element);
+        try { element.pause(); } catch (_) {}
+        element.srcObject = null;
+        element.remove();
+      };
       var clearRemoteAudio = function () {
-        elements.forEach(function (element) {
-          element.pause(); element.srcObject = null; element.remove();
-        });
-        elements.clear();
+        Array.from(elements).forEach(discardAudioElement);
       };
       room.on(sdk.RoomEvent.TrackSubscribed, function (track) {
         if (track.kind !== sdk.Track.Kind.Audio || closed) return;
@@ -37,7 +43,8 @@
         var playing = element.play(); if (playing) playing.catch(function () {});
       });
       room.on(sdk.RoomEvent.TrackUnsubscribed, function (track) {
-        track.detach().forEach(function (element) { elements.delete(element); element.remove(); });
+        if (track.kind !== sdk.Track.Kind.Audio) return;
+        track.detach().forEach(discardAudioElement);
       });
       room.on(sdk.RoomEvent.ConnectionStateChanged, function (state) {
         if (mediaEvents.mediaConnectionUpdate) mediaEvents.mediaConnectionUpdate({transport:'consuming',state:state});
