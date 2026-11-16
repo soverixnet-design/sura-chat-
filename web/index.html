@@ -1357,7 +1357,7 @@ async function openRoomGiftPreview(){
  });
  document.addEventListener("submit",async e=>{const form=e.target;if(!form.id&&!form.classList.contains("report-review"))return;e.preventDefault();const d=new FormData(form);const btn=form.querySelector("button[type=submit],button.gold");if(btn)btn.disabled=true;
   try{
-   if(form.id==="authForm"){const generation=++S.authGeneration;const payload={password:String(d.get("password"))};if(S.signup){payload.email=String(d.get("email")||"").trim();payload.phone=String(d.get("phone")||"").trim();payload.display_name=String(d.get("display_name")).trim();payload.country_code=String(d.get("country_code")).trim().toUpperCase();if((!payload.email&&!payload.phone)||!/^\\d{8}$/.test(payload.password))throw Error("invalid_signup");}else{payload.identifier=String(d.get("identifier")||"").trim();}if(btn)btn.textContent=S.signup?"Creating account…":"Signing in…";const r=await api(S.signup?"/api/v1/auth/signup":"/api/v1/auth/login","POST",payload);if(generation!==S.authGeneration)return;if(!r||typeof r.token!=="string"||!r.user||!r.user.public_id)throw Error("invalid_response");S.token=r.token;S.user=r.user;if(d.get("remember")==="on")rememberLogin(r.token,r.expires_in);else forgetSavedLogin();startApp();toast("Welcome to SURA CHAT");}
+   if(form.id==="authForm"){const generation=++S.authGeneration;const payload={password:String(d.get("password"))};if(S.signup){payload.email=String(d.get("email")||"").trim();payload.phone=String(d.get("phone")||"").trim();payload.display_name=String(d.get("display_name")).trim();payload.country_code=String(d.get("country_code")).trim().toUpperCase();if((!payload.email&&!payload.phone)||!/^\d{8}$/.test(payload.password))throw Error("invalid_signup");}else{payload.identifier=String(d.get("identifier")||"").trim();}if(btn)btn.textContent=S.signup?"Creating account…":"Signing in…";const r=await api(S.signup?"/api/v1/auth/signup":"/api/v1/auth/login","POST",payload);if(generation!==S.authGeneration)return;if(!r||typeof r.token!=="string"||!r.user||!r.user.public_id)throw Error("invalid_response");S.token=r.token;S.user=r.user;if(d.get("remember")==="on")rememberLogin(r.token,r.expires_in);else forgetSavedLogin();startApp();toast("Welcome to SURA CHAT");}
    else if(form.id==="joinRoomCode"){
     const code=String(d.get("room_code")||"").trim();
     if(!/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(code))throw Error("Use a valid room invitation code.");
@@ -1415,7 +1415,7 @@ async function openRoomGiftPreview(){
     const current=String(d.get("current_password")||"");
     const next=String(d.get("new_password")||"");
     if(next!==String(d.get("confirm_password")||""))throw Error("Passwords do not match.");
-    if(!(/^\\d{8}$/.test(next)||(next.length>=10&&next.length<=64&&/[A-Za-z]/.test(next)&&/[0-9]/.test(next))))throw Error("Use an 8-digit PIN or 10–64 characters with letters and numbers.");
+    if(!(/^\d{8}$/.test(next)||(next.length>=10&&next.length<=64&&/[A-Za-z]/.test(next)&&/[0-9]/.test(next))))throw Error("Use an 8-digit PIN or 10–64 characters with letters and numbers.");
     const r=await api("/api/v1/auth/change-password","POST",{current_password:current,new_password:next});
     if(!r.password_changed)throw Error("Password not changed.");
     form.reset();toast("Password changed; other phones signed out.");
