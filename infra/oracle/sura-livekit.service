@@ -1,0 +1,18 @@
+[Unit]
+Description=Sura Chat staging LiveKit
+After=network-online.target
+Wants=network-online.target
+[Service]
+Type=simple
+User=sura-livekit
+Group=sura-livekit
+ExecStart=/opt/sura-chat/livekit/1.13.11/livekit-server --config /etc/sura-livekit/server.yaml
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+LimitNOFILE=65536
+[Install]
+WantedBy=multi-user.target

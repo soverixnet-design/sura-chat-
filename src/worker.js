@@ -1,3 +1,4 @@
+import { LivekitError, livekitConfigured, issueLivekit, revokeLivekit, authorizeLivekit } from './livekit.js';
 // SURA CHAT staging API. Intentionally separate from the Sharika infrastructure.
 // Authentication, room membership and public Moments are backed by dedicated SURA D1.
 // Payments, gifting, salary and admin mutations remain disabled.
@@ -751,6 +752,7 @@ async function realtimeApi(env, method, path, data) {
 }
 
 async function revokeVoiceParticipant(env, roomId, userId) {
+  await revokeLivekit(env, roomId, userId);
   const participant = await env.DB.prepare(`SELECT p.participant_id, m.meeting_id FROM room_voice_participants p
     JOIN room_voice_meetings m ON m.room_id = p.room_id
     WHERE p.room_id = ? AND p.user_id = ?`).bind(roomId, userId).first();
@@ -1350,7 +1352,18 @@ export default {
       const url = new URL(request.url);
       const path = url.pathname.replace(/\/+$/, '') || '/';
 
+      if (path === '/api/v1/rtc/authorize' && request.method === 'GET') {
+        await authorizeLivekit(env, request.headers.get('X-Sura-RTC-Token'));
+        return new Response(null, {status:204,headers:{'Cache-Control':'no-store'}});
+      }
       if (request.method === 'POST') {
+        const livekitMatch = /^\/api\/v1\/rooms\/([0-9a-f-]{36})\/livekit\/token$/i.exec(path);
+        if (livekitMatch) {
+          const permission = await voiceEligibility(request, env, livekitMatch[1]);
+          await rateLimit(request, env, 'room-voice');
+          return json(await issueLivekit(env, livekitMatch[1], permission,
+            () => voiceEligibility(request, env, livekitMatch[1]).catch(() => null)));
+        }
         if (path === '/api/v1/auth/signup') return await signup(request, env);
         if (path === '/api/v1/auth/login') return await login(request, env);
         if (path === '/api/v1/auth/change-password') return await changeMyPassword(request, env);
@@ -1430,7 +1443,7 @@ export default {
       const voiceEligibilityMatch = /^\/api\/v1\/rooms\/([0-9a-f-]{36})\/voice\/status$/i.exec(path);
       if (voiceEligibilityMatch) {
         const permission = await voiceEligibility(request, env, voiceEligibilityMatch[1]);
-        return json({ configured: voiceConfigured(env), role: permission.role, seat: permission.seat });
+        return json({ configured: voiceConfigured(env), livekit_configured: livekitConfigured(env), role: permission.role, seat: permission.seat });
       }
 
       if (path === '/api/v1/config') {
@@ -1481,7 +1494,7 @@ export default {
 
       return json({ error: 'not_found' }, 404);
     } catch (error) {
-      if (error instanceof HttpError) return json({ error: error.code }, error.status);
+      if (error instanceof HttpError || error instanceof LivekitError) return json({ error: error.code }, error.status);
       // Never leak D1 errors or infrastructure details to clients.
       console.error(JSON.stringify({ event: 'sura_api_error', name: error?.name, message: error?.message }));
       return json({ error: 'server_error' }, 500);
